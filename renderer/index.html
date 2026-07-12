@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>InterpreterApp</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="header">
+        <h1>InterpreterApp</h1>
+        <p>Microphone to Japanese Realtime Translation</p>
+      </header>
+
+      <section class="status" id="status">初期化中...</section>
+
+      <section class="panel">
+        <label for="targetLanguage">Target Language</label>
+        <select id="targetLanguage">
+          <option value="ja" selected>Japanese (ja)</option>
+        </select>
+
+        <div class="actions">
+          <button id="startButton" type="button">Start Realtime Translation</button>
+          <button id="stopButton" type="button" disabled>Stop</button>
+          <button id="clearButton" type="button" class="secondary">Clear Output</button>
+        </div>
+      </section>
+
+      <section class="panel-grid">
+        <article class="panel full-width">
+          <label for="translatedText">Realtime Japanese Output</label>
+          <textarea id="translatedText" readonly placeholder="Microphone translation appears here..."></textarea>
+        </article>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

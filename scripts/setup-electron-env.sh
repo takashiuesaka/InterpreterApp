@@ -45,6 +45,9 @@ fi
 echo "[INFO] Installing Electron Forge CLI and Electron"
 npm install --save-dev @electron-forge/cli electron
 
+echo "[INFO] Installing runtime dependencies"
+npm install dotenv ws
+
 echo "[INFO] Configuring package.json scripts"
 npm pkg set scripts.start="electron-forge start"
 npm pkg set scripts.package="electron-forge package"

@@ -43,6 +43,23 @@
 
 - npm レジストリにアクセスできること
 - Electron バイナリを取得できること
+- Microsoft Foundry エンドポイントへアクセスできること
+
+## Foundry 事前準備 (MVP 検証に必須)
+
+MVP では、リアルタイム翻訳機能を持つ GPT モデルとの実通信が必須です。
+
+1. Foundry 上で対象モデルのデプロイを作成済みであること
+2. 以下の接続情報を取得済みであること
+
+- FOUNDRY_ENDPOINT
+- FOUNDRY_API_KEY
+- FOUNDRY_DEPLOYMENT
+
+補足:
+- デプロイは `gpt-realtime-translate` モデルを使用
+- 実装は GA WebSocket パス `openai/v1/realtime/translations?model=<deployment>` を使用
+- Electron アプリでマイク利用許可が必要
 
 ## 自動セットアップで実施する内容
 
