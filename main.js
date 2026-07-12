@@ -345,7 +345,7 @@ ipcMain.on('translate:audio-append', (event, payload) => {
 
   session.ws.send(
     JSON.stringify({
-      type: 'input_audio_buffer.append',
+      type: 'session.input_audio_buffer.append',
       audio: audioBase64,
     }),
   );
@@ -370,7 +370,7 @@ ipcMain.on('translate:audio-commit', (event) => {
 
   session.ws.send(
     JSON.stringify({
-      type: 'input_audio_buffer.commit',
+      type: 'session.input_audio_buffer.commit',
     }),
   );
 

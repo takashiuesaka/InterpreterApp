@@ -227,7 +227,7 @@ async function startRealtimeTranslation() {
       window.translatorApi.commitAudioBuffer();
       bufferedChunkCount = 0;
       bufferedSampleCount = 0;
-    }, 700);
+    }, 1200);
 
     setStatus('Realtime翻訳中... マイク入力を日本語へ変換しています。');
   } catch (error) {
