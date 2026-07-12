@@ -1,5 +1,6 @@
 const path = require('node:path');
 const { app, BrowserWindow, ipcMain } = require('electron');
+const { InteractiveBrowserCredential } = require('@azure/identity');
 const WebSocket = require('ws');
 
 try {
@@ -9,21 +10,54 @@ try {
 }
 
 const realtimeSessions = new Map();
+const FOUNDRY_SCOPE = 'https://cognitiveservices.azure.com/.default';
+
+let cachedToken = null;
+let startupAuthError = null;
+
+function createInteractiveCredential() {
+  const tenantId = process.env.AZURE_TENANT_ID;
+
+  return new InteractiveBrowserCredential({ tenantId });
+}
+
+const credential = createInteractiveCredential();
+
+async function getAccessToken(forceRefresh = false) {
+  if (!forceRefresh && cachedToken && cachedToken.expiresOnTimestamp - Date.now() > 60_000) {
+    return cachedToken.token;
+  }
+
+  const token = await credential.getToken(FOUNDRY_SCOPE);
+  if (!token || !token.token) {
+    throw new Error('Failed to acquire Entra ID access token.');
+  }
+
+  cachedToken = token;
+  return token.token;
+}
+
+async function authenticateAtStartup() {
+  try {
+    await getAccessToken(true);
+    startupAuthError = null;
+  } catch (error) {
+    startupAuthError = error;
+  }
+}
 
 function getFoundryConfig() {
   const endpoint = process.env.FOUNDRY_ENDPOINT;
-  const apiKey = process.env.FOUNDRY_API_KEY;
   const deployment = process.env.FOUNDRY_DEPLOYMENT;
 
-  if (!endpoint || !apiKey || !deployment) {
+  if (!endpoint || !deployment) {
     throw new Error(
-      'Missing Foundry configuration. Set FOUNDRY_ENDPOINT, FOUNDRY_API_KEY, and FOUNDRY_DEPLOYMENT.',
+      'Missing Foundry configuration. Set FOUNDRY_ENDPOINT and FOUNDRY_DEPLOYMENT.',
     );
   }
 
   return {
     endpoint: endpoint.replace(/\/$/, ''),
-    apiKey,
     deployment,
   };
 }
@@ -53,6 +87,7 @@ async function startRealtimeSession(webContents, targetLanguage) {
   closeRealtimeSession(webContentsId);
 
   const config = getFoundryConfig();
+  const accessToken = await getAccessToken();
   const realtimeUrl = buildRealtimeTranslationUrl(config);
 
   return new Promise((resolve, reject) => {
@@ -60,7 +95,7 @@ async function startRealtimeSession(webContents, targetLanguage) {
 
     const ws = new WebSocket(realtimeUrl, {
       headers: {
-        'api-key': config.apiKey,
+        Authorization: `Bearer ${accessToken}`,
       },
     });
 
@@ -205,6 +240,14 @@ ipcMain.handle('translate:realtime-audio-stop', async (event) => {
 ipcMain.handle('translate:health', async () => {
   try {
     getFoundryConfig();
+
+    if (startupAuthError) {
+      await getAccessToken(true);
+      startupAuthError = null;
+    } else {
+      await getAccessToken();
+    }
+
     return { ready: true };
   } catch (error) {
     return { ready: false, reason: error.message };
@@ -226,7 +269,8 @@ function createWindow() {
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  await authenticateAtStartup();
   createWindow();
 
   app.on('web-contents-created', (_appEvent, contents) => {
