@@ -47,7 +47,7 @@
 
 ## Foundry 事前準備 (MVP 検証に必須)
 
-MVP では、`gpt-realtime-2.1` との実通信が必須です。
+MVP では、`gpt-realtime-translate` との実通信が必須です。
 
 1. Foundry 上で対象モデルのデプロイを作成済みであること
 2. 以下の接続情報を取得済みであること
@@ -57,8 +57,8 @@ MVP では、`gpt-realtime-2.1` との実通信が必須です。
 - AZURE_TENANT_ID (必要に応じて)
 
 補足:
-- デプロイは `gpt-realtime-2.1` モデルを使用
-- 実装は GA WebSocket パス `openai/v1/realtime?model=<deployment>` を使用
+- デプロイは `gpt-realtime-translate` モデルを使用
+- 実装は GA WebSocket パス `openai/v1/realtime/translations?model=<deployment>` を使用
 - Electron アプリでマイク利用許可が必要
 - 認証は Entra ID (Bearer) を使用
 - 起動時にブラウザーを開いて Entra ID 認証を実行

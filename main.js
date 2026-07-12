@@ -11,14 +11,12 @@ try {
 
 const realtimeSessions = new Map();
 const FOUNDRY_SCOPE = 'https://cognitiveservices.azure.com/.default';
-const MIN_COMMIT_SAMPLES = 2400; // 100ms at 24kHz
 
 let cachedToken = null;
 let startupAuthError = null;
 
 function createInteractiveCredential() {
   const tenantId = process.env.AZURE_TENANT_ID;
-
   return new InteractiveBrowserCredential({ tenantId });
 }
 
@@ -67,18 +65,18 @@ function getFoundryConfig() {
   };
 }
 
-function buildRealtimeUrlCandidates(config) {
+function buildRealtimeTranslateUrlCandidates(config) {
   const wsEndpoint = config.endpoint.replace(/^http/i, 'ws');
   const deployment = encodeURIComponent(config.deployment);
 
   const ga = {
     mode: 'ga',
-    url: `${wsEndpoint}/openai/v1/realtime?model=${deployment}`,
+    url: `${wsEndpoint}/openai/v1/realtime/translations?model=${deployment}`,
   };
 
   const preview = {
     mode: 'preview',
-    url: `${wsEndpoint}/openai/realtime?api-version=${encodeURIComponent(config.realtimeApiVersion)}&deployment=${deployment}`,
+    url: `${wsEndpoint}/openai/realtime/translations?api-version=${encodeURIComponent(config.realtimeApiVersion)}&deployment=${deployment}`,
   };
 
   if (config.realtimeMode === 'ga') {
@@ -204,7 +202,7 @@ async function startRealtimeSession(webContents, targetLanguage) {
 
   const config = getFoundryConfig();
   const accessToken = await getAccessToken();
-  const urlCandidates = buildRealtimeUrlCandidates(config);
+  const urlCandidates = buildRealtimeTranslateUrlCandidates(config);
   const { ws, mode, url } = await connectWithFallback(urlCandidates, accessToken);
 
   return new Promise((resolve, reject) => {
@@ -224,16 +222,9 @@ async function startRealtimeSession(webContents, targetLanguage) {
       JSON.stringify({
         type: 'session.update',
         session: {
-          type: 'realtime',
           audio: {
-            input: {
-              format: {
-                type: 'audio/pcm',
-                rate: 24000,
-              },
-              turn_detection: {
-                type: 'server_vad',
-              },
+            output: {
+              language: targetLanguage,
             },
           },
         },
@@ -269,7 +260,6 @@ async function startRealtimeSession(webContents, targetLanguage) {
             targetLanguage,
             mode,
             url,
-            pendingSamples: 0,
           });
           webContents.send('translate:session', { state: 'ready', mode, url });
           resolve({ ok: true });
@@ -347,42 +337,6 @@ ipcMain.on('translate:audio-append', (event, payload) => {
     JSON.stringify({
       type: 'session.input_audio_buffer.append',
       audio: audioBase64,
-    }),
-  );
-
-  // 16-bit PCM mono => 2 bytes per sample.
-  const sampleCount = Buffer.from(audioBase64, 'base64').length / 2;
-  if (Number.isFinite(sampleCount) && sampleCount > 0) {
-    session.pendingSamples += sampleCount;
-  }
-});
-
-ipcMain.on('translate:audio-commit', (event) => {
-  const session = realtimeSessions.get(event.sender.id);
-  if (!session) {
-    return;
-  }
-
-  // Avoid server-side "buffer too small" by committing only when at least 100ms is buffered.
-  if (!session.pendingSamples || session.pendingSamples < MIN_COMMIT_SAMPLES) {
-    return;
-  }
-
-  session.ws.send(
-    JSON.stringify({
-      type: 'session.input_audio_buffer.commit',
-    }),
-  );
-
-  session.pendingSamples = 0;
-
-  session.ws.send(
-    JSON.stringify({
-      type: 'response.create',
-      response: {
-        modalities: ['text'],
-        instructions: `Translate spoken English into natural ${session.targetLanguage === 'ja' ? 'Japanese' : session.targetLanguage}. Output only translated text in the target language.`,
-      },
     }),
   );
 });
