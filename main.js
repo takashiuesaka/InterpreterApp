@@ -244,9 +244,7 @@ function summarizeRealtimeEvent(event) {
     eventType === 'response.text.delta' ||
     eventType === 'response.audio_transcript.delta' ||
     eventType === 'session.output_text.delta' ||
-    eventType === 'session.output_audio_transcript.delta' ||
-    eventType === 'session.output_transcript.delta' ||
-    eventType === 'session.input_transcript.delta'
+    eventType === 'session.output_audio_transcript.delta'
   ) {
     const delta =
       typeof event?.delta === 'string'
@@ -262,8 +260,7 @@ function summarizeRealtimeEvent(event) {
     eventType === 'response.text.done' ||
     eventType === 'response.done' ||
     eventType === 'session.output_text.done' ||
-    eventType === 'session.output_audio_transcript.done' ||
-    eventType === 'session.output_transcript.done'
+    eventType === 'session.output_audio_transcript.done'
   ) {
     const doneText =
       typeof event?.text === 'string' ? event.text : extractTextFromResponseDone(event);
@@ -362,10 +359,7 @@ async function startRealtimeSession(webContents, targetLanguage) {
         event?.type === 'response.text.delta' ||
         event?.type === 'response.audio_transcript.delta' ||
         event?.type === 'session.output_text.delta' ||
-        event?.type === 'session.output_audio_transcript.delta' ||
-        event?.type === 'session.output_transcript.delta';
-
-      const isInputTranscriptDeltaEvent = event?.type === 'session.input_transcript.delta';
+        event?.type === 'session.output_audio_transcript.delta';
 
       if (isTextDeltaEvent) {
         const delta =
@@ -380,26 +374,12 @@ async function startRealtimeSession(webContents, targetLanguage) {
         return;
       }
 
-      if (isInputTranscriptDeltaEvent) {
-        const delta = typeof event?.delta === 'string' ? event.delta : '';
-        if (delta) {
-          webContents.send('translate:event', {
-            source: 'server',
-            eventType: 'session.input_transcript.delta',
-            message: `input(${delta.length}): ${delta.slice(0, 80)}`,
-            timestamp: Date.now(),
-          });
-        }
-        return;
-      }
-
       const isTextDoneEvent =
         event?.type === 'response.output_text.done' ||
         event?.type === 'response.text.done' ||
         event?.type === 'response.done' ||
         event?.type === 'session.output_text.done' ||
-        event?.type === 'session.output_audio_transcript.done' ||
-        event?.type === 'session.output_transcript.done';
+        event?.type === 'session.output_audio_transcript.done';
 
       if (isTextDoneEvent) {
         const doneText =
