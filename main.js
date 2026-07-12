@@ -49,6 +49,8 @@ async function authenticateAtStartup() {
 function getFoundryConfig() {
   const endpoint = process.env.FOUNDRY_ENDPOINT;
   const deployment = process.env.FOUNDRY_DEPLOYMENT;
+  const realtimeMode = (process.env.FOUNDRY_REALTIME_MODE || 'auto').toLowerCase();
+  const realtimeApiVersion = process.env.FOUNDRY_REALTIME_API_VERSION || '2025-04-01-preview';
 
   if (!endpoint || !deployment) {
     throw new Error(
@@ -59,12 +61,125 @@ function getFoundryConfig() {
   return {
     endpoint: endpoint.replace(/\/$/, ''),
     deployment,
+    realtimeMode,
+    realtimeApiVersion,
   };
 }
 
-function buildRealtimeUrl(config) {
+function buildRealtimeUrlCandidates(config) {
   const wsEndpoint = config.endpoint.replace(/^http/i, 'ws');
-  return `${wsEndpoint}/openai/v1/realtime?model=${encodeURIComponent(config.deployment)}`;
+  const deployment = encodeURIComponent(config.deployment);
+
+  const ga = {
+    mode: 'ga',
+    url: `${wsEndpoint}/openai/v1/realtime?model=${deployment}`,
+  };
+
+  const preview = {
+    mode: 'preview',
+    url: `${wsEndpoint}/openai/realtime?api-version=${encodeURIComponent(config.realtimeApiVersion)}&deployment=${deployment}`,
+  };
+
+  if (config.realtimeMode === 'ga') {
+    return [ga];
+  }
+
+  if (config.realtimeMode === 'preview') {
+    return [preview];
+  }
+
+  return [ga, preview];
+}
+
+function openWebSocketWithBearer(url, accessToken) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+
+    const ws = new WebSocket(url, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    const timer = setTimeout(() => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      try {
+        ws.close();
+      } catch {
+        // no-op
+      }
+      reject(new Error(`WebSocket connect timeout: ${url}`));
+    }, 10000);
+
+    const finishSuccess = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      resolve(ws);
+    };
+
+    const finishError = (error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      try {
+        ws.close();
+      } catch {
+        // no-op
+      }
+      reject(error);
+    };
+
+    ws.once('open', finishSuccess);
+
+    ws.once('unexpected-response', (_request, response) => {
+      let body = '';
+      response.on('data', (chunk) => {
+        body += chunk.toString();
+      });
+      response.on('end', () => {
+        const status = response.statusCode || 'unknown';
+        const statusText = response.statusMessage || '';
+        const compactBody = body.replace(/\s+/g, ' ').trim().slice(0, 500);
+        finishError(
+          new Error(
+            `WebSocket handshake failed (${status} ${statusText}) for ${url}. ${compactBody}`,
+          ),
+        );
+      });
+    });
+
+    ws.once('error', (error) => {
+      finishError(new Error(`WebSocket connection error for ${url}: ${error.message}`));
+    });
+  });
+}
+
+async function connectWithFallback(urlCandidates, accessToken) {
+  const failures = [];
+
+  for (const candidate of urlCandidates) {
+    try {
+      const ws = await openWebSocketWithBearer(candidate.url, accessToken);
+      return {
+        ws,
+        mode: candidate.mode,
+        url: candidate.url,
+      };
+    } catch (error) {
+      failures.push(`[${candidate.mode}] ${error.message}`);
+    }
+  }
+
+  throw new Error(`Failed to connect Realtime endpoint. ${failures.join(' | ')}`);
 }
 
 function closeRealtimeSession(webContentsId) {
@@ -88,16 +203,11 @@ async function startRealtimeSession(webContents, targetLanguage) {
 
   const config = getFoundryConfig();
   const accessToken = await getAccessToken();
-  const realtimeUrl = buildRealtimeUrl(config);
+  const urlCandidates = buildRealtimeUrlCandidates(config);
+  const { ws, mode, url } = await connectWithFallback(urlCandidates, accessToken);
 
   return new Promise((resolve, reject) => {
     let setupCompleted = false;
-
-    const ws = new WebSocket(realtimeUrl, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
 
     const setupTimeout = setTimeout(() => {
       if (setupCompleted) {
@@ -152,8 +262,10 @@ async function startRealtimeSession(webContents, targetLanguage) {
           realtimeSessions.set(webContentsId, {
             ws,
             targetLanguage,
+            mode,
+            url,
           });
-          webContents.send('translate:session', { state: 'ready' });
+          webContents.send('translate:session', { state: 'ready', mode, url });
           resolve({ ok: true });
         }
         return;
