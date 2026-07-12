@@ -219,21 +219,19 @@ async function startRealtimeSession(webContents, targetLanguage) {
       reject(new Error('Timed out waiting for session.updated event.'));
     }, 15000);
 
-    ws.on('open', () => {
-      ws.send(
-        JSON.stringify({
-          type: 'session.update',
-          session: {
-            modalities: ['text'],
-            instructions: `You are a real-time interpreter. Translate spoken English into natural ${targetLanguage === 'ja' ? 'Japanese' : targetLanguage}. Output only the translated text in the target language.`,
-            input_audio_format: 'pcm16',
-            turn_detection: {
-              type: 'server_vad',
-            },
+    ws.send(
+      JSON.stringify({
+        type: 'session.update',
+        session: {
+          modalities: ['text'],
+          instructions: `You are a real-time interpreter. Translate spoken English into natural ${targetLanguage === 'ja' ? 'Japanese' : targetLanguage}. Output only the translated text in the target language.`,
+          input_audio_format: 'pcm16',
+          turn_detection: {
+            type: 'server_vad',
           },
-        }),
-      );
-    });
+        },
+      }),
+    );
 
     ws.on('message', (rawData) => {
       let event;
@@ -341,6 +339,28 @@ ipcMain.on('translate:audio-append', (event, payload) => {
     JSON.stringify({
       type: 'input_audio_buffer.append',
       audio: audioBase64,
+    }),
+  );
+});
+
+ipcMain.on('translate:audio-commit', (event) => {
+  const session = realtimeSessions.get(event.sender.id);
+  if (!session) {
+    return;
+  }
+
+  session.ws.send(
+    JSON.stringify({
+      type: 'input_audio_buffer.commit',
+    }),
+  );
+
+  session.ws.send(
+    JSON.stringify({
+      type: 'response.create',
+      response: {
+        modalities: ['text'],
+      },
     }),
   );
 });

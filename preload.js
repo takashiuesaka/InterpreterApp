@@ -11,6 +11,9 @@ contextBridge.exposeInMainWorld('translatorApi', {
       audio: audioBase64,
     });
   },
+  commitAudioBuffer: () => {
+    ipcRenderer.send('translate:audio-commit');
+  },
   stopRealtimeAudioTranslation: async () => {
     return ipcRenderer.invoke('translate:realtime-audio-stop');
   },

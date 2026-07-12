@@ -16,6 +16,8 @@ let sourceNode = null;
 let processorNode = null;
 let muteGainNode = null;
 let running = false;
+let commitTimer = null;
+let bufferedChunkCount = 0;
 
 const TARGET_SAMPLE_RATE = 24000;
 
@@ -93,6 +95,13 @@ async function stopRealtimeTranslation() {
   running = false;
   updateButtons(false);
 
+  if (commitTimer) {
+    clearInterval(commitTimer);
+    commitTimer = null;
+  }
+
+  bufferedChunkCount = 0;
+
   if (processorNode) {
     try {
       processorNode.disconnect();
@@ -155,8 +164,6 @@ async function startRealtimeTranslation() {
   setStatus('Realtime翻訳セッションを開始しています...');
 
   try {
-    await window.translatorApi.startRealtimeAudioTranslation(targetLanguage.value);
-
     mediaStream = await navigator.mediaDevices.getUserMedia({
       audio: {
         channelCount: 1,
@@ -167,6 +174,10 @@ async function startRealtimeTranslation() {
     });
 
     audioContext = new AudioContext();
+    await audioContext.resume();
+
+    await window.translatorApi.startRealtimeAudioTranslation(targetLanguage.value);
+
     sourceNode = audioContext.createMediaStreamSource(mediaStream);
     processorNode = audioContext.createScriptProcessor(4096, 1, 1);
     muteGainNode = audioContext.createGain();
@@ -186,6 +197,7 @@ async function startRealtimeTranslation() {
       const int16 = convertFloat32ToInt16(downsampled);
       const audioBase64 = int16ToBase64(int16);
       window.translatorApi.appendAudioChunk(audioBase64);
+      bufferedChunkCount += 1;
     };
 
     sourceNode.connect(processorNode);
@@ -194,6 +206,20 @@ async function startRealtimeTranslation() {
 
     running = true;
     updateButtons(true);
+
+    commitTimer = setInterval(() => {
+      if (!running) {
+        return;
+      }
+
+      if (bufferedChunkCount === 0) {
+        return;
+      }
+
+      window.translatorApi.commitAudioBuffer();
+      bufferedChunkCount = 0;
+    }, 700);
+
     setStatus('Realtime翻訳中... マイク入力を日本語へ変換しています。');
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
