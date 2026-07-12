@@ -224,16 +224,19 @@ async function startRealtimeSession(webContents, targetLanguage) {
         type: 'session.update',
         session: {
           type: 'realtime',
-          modalities: ['text'],
-          instructions: `You are a real-time interpreter. Translate spoken English into natural ${targetLanguage === 'ja' ? 'Japanese' : targetLanguage}. Output only the translated text in the target language.`,
-          input_audio_format: 'pcm16',
           audio: {
+            input: {
+              format: {
+                type: 'audio/pcm',
+                rate: 24000,
+              },
+              turn_detection: {
+                type: 'server_vad',
+              },
+            },
             output: {
               language: targetLanguage,
             },
-          },
-          turn_detection: {
-            type: 'server_vad',
           },
         },
       }),
@@ -366,6 +369,7 @@ ipcMain.on('translate:audio-commit', (event) => {
       type: 'response.create',
       response: {
         modalities: ['text'],
+        instructions: `Translate spoken English into natural ${session.targetLanguage === 'ja' ? 'Japanese' : session.targetLanguage}. Output only translated text in the target language.`,
       },
     }),
   );
