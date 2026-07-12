@@ -77,42 +77,69 @@ function buildSessionConfig(deployment, targetLanguage) {
   };
 }
 
+function buildWebRtcEndpointCandidates(endpoint) {
+  return [
+    {
+      label: 'realtime',
+      clientSecretsUrl: `${endpoint}/openai/v1/realtime/client_secrets`,
+      callsUrl: `${endpoint}/openai/v1/realtime/calls?webrtcfilter=on`,
+    },
+    {
+      label: 'realtime-translations',
+      clientSecretsUrl: `${endpoint}/openai/v1/realtime/translations/client_secrets`,
+      callsUrl: `${endpoint}/openai/v1/realtime/translations/calls?webrtcfilter=on`,
+    },
+  ];
+}
+
 async function createEphemeralToken(targetLanguage) {
   const config = getFoundryConfig();
   const accessToken = await getAccessToken();
+  const endpointCandidates = buildWebRtcEndpointCandidates(config.endpoint);
+  const errors = [];
 
-  const response = await fetch(`${config.endpoint}/openai/v1/realtime/client_secrets`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(buildSessionConfig(config.deployment, targetLanguage)),
-  });
+  for (const candidate of endpointCandidates) {
+    const response = await fetch(candidate.clientSecretsUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(buildSessionConfig(config.deployment, targetLanguage)),
+    });
 
-  const bodyText = await response.text();
-  if (!response.ok) {
-    throw new Error(
-      `Failed to create ephemeral token (${response.status} ${response.statusText}): ${bodyText.slice(0, 500)}`,
-    );
+    const bodyText = await response.text();
+    if (!response.ok) {
+      errors.push(
+        `[${candidate.label}] ${response.status} ${response.statusText}: ${bodyText.slice(0, 240)}`,
+      );
+      continue;
+    }
+
+    let payload;
+    try {
+      payload = JSON.parse(bodyText);
+    } catch {
+      errors.push(`[${candidate.label}] 200 OK but response was not valid JSON.`);
+      continue;
+    }
+
+    const token = typeof payload?.value === 'string' ? payload.value : '';
+    if (!token) {
+      errors.push(`[${candidate.label}] 200 OK but ephemeral token was missing in payload.`);
+      continue;
+    }
+
+    return {
+      ephemeralKey: token,
+      callsUrl: candidate.callsUrl,
+      transportPath: candidate.label,
+    };
   }
 
-  let payload;
-  try {
-    payload = JSON.parse(bodyText);
-  } catch {
-    throw new Error('Failed to parse ephemeral token response as JSON.');
-  }
-
-  const token = typeof payload?.value === 'string' ? payload.value : '';
-  if (!token) {
-    throw new Error('Ephemeral token was not found in response payload.');
-  }
-
-  return {
-    ephemeralKey: token,
-    callsUrl: `${config.endpoint}/openai/v1/realtime/calls?webrtcfilter=on`,
-  };
+  throw new Error(
+    `Failed to create ephemeral token for deployment '${config.deployment}'. Tried ${endpointCandidates.length} endpoint variants. ${errors.join(' | ')}`,
+  );
 }
 
 ipcMain.handle('translate:realtime-audio-start', async (_event, payload) => {
