@@ -4,9 +4,9 @@
 
 ## MVP の必須条件
 
-1. Microsoft Foundry のリアルタイム翻訳機能を持つ GPT モデルを対象にする
-2. `openai/v1/realtime/translations?model=<deployment>` への WebSocket 接続が成功する
-3. マイク音声が `session.input_audio_buffer.append` で送信される
+1. Microsoft Foundry の `gpt-realtime-2.1` デプロイを対象にする
+2. `openai/v1/realtime?model=<deployment>` への WebSocket 接続が成功する
+3. マイク音声が `input_audio_buffer.append` で送信される
 4. `response.text.delta` が継続的に受信され、日本語翻訳が UI に逐次表示される
 5. `response.text.done` まで受信できる
 6. macOS ローカルで上記の一連の流れが再現できる
@@ -29,7 +29,7 @@
 
 ## 完了判定
 
-- 上記「MVP の必須条件」5項目がすべて満たされたら MVP 完了
+- 上記「MVP の必須条件」7項目がすべて満たされたら MVP 完了
 
 ## 補足
 

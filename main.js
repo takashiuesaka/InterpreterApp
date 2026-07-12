@@ -62,9 +62,9 @@ function getFoundryConfig() {
   };
 }
 
-function buildRealtimeTranslationUrl(config) {
+function buildRealtimeUrl(config) {
   const wsEndpoint = config.endpoint.replace(/^http/i, 'ws');
-  return `${wsEndpoint}/openai/v1/realtime/translations?model=${encodeURIComponent(config.deployment)}`;
+  return `${wsEndpoint}/openai/v1/realtime?model=${encodeURIComponent(config.deployment)}`;
 }
 
 function closeRealtimeSession(webContentsId) {
@@ -88,7 +88,7 @@ async function startRealtimeSession(webContents, targetLanguage) {
 
   const config = getFoundryConfig();
   const accessToken = await getAccessToken();
-  const realtimeUrl = buildRealtimeTranslationUrl(config);
+  const realtimeUrl = buildRealtimeUrl(config);
 
   return new Promise((resolve, reject) => {
     let setupCompleted = false;
@@ -114,10 +114,11 @@ async function startRealtimeSession(webContents, targetLanguage) {
         JSON.stringify({
           type: 'session.update',
           session: {
-            audio: {
-              output: {
-                language: targetLanguage,
-              },
+            modalities: ['text'],
+            instructions: `You are a real-time interpreter. Translate spoken English into natural ${targetLanguage === 'ja' ? 'Japanese' : targetLanguage}. Output only the translated text in the target language.`,
+            input_audio_format: 'pcm16',
+            turn_detection: {
+              type: 'server_vad',
             },
           },
         }),
@@ -226,7 +227,7 @@ ipcMain.on('translate:audio-append', (event, payload) => {
 
   session.ws.send(
     JSON.stringify({
-      type: 'session.input_audio_buffer.append',
+      type: 'input_audio_buffer.append',
       audio: audioBase64,
     }),
   );

@@ -250,7 +250,7 @@ async function initialize() {
     }
 
     setStatus(
-      `Foundry設定が不足しています: ${health.reason}\nFOUNDRY_ENDPOINT / FOUNDRY_API_KEY / FOUNDRY_DEPLOYMENT を設定してください。`,
+      `Foundry設定が不足しています: ${health.reason}\nFOUNDRY_ENDPOINT / FOUNDRY_DEPLOYMENT を設定してください。`,
       true,
     );
   } catch (error) {
