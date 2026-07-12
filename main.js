@@ -11,6 +11,7 @@ try {
 
 const realtimeSessions = new Map();
 const FOUNDRY_SCOPE = 'https://cognitiveservices.azure.com/.default';
+const MIN_COMMIT_SAMPLES = 2400; // 100ms at 24kHz
 
 let cachedToken = null;
 let startupAuthError = null;
@@ -268,6 +269,7 @@ async function startRealtimeSession(webContents, targetLanguage) {
             targetLanguage,
             mode,
             url,
+            pendingSamples: 0,
           });
           webContents.send('translate:session', { state: 'ready', mode, url });
           resolve({ ok: true });
@@ -347,6 +349,12 @@ ipcMain.on('translate:audio-append', (event, payload) => {
       audio: audioBase64,
     }),
   );
+
+  // 16-bit PCM mono => 2 bytes per sample.
+  const sampleCount = Buffer.from(audioBase64, 'base64').length / 2;
+  if (Number.isFinite(sampleCount) && sampleCount > 0) {
+    session.pendingSamples += sampleCount;
+  }
 });
 
 ipcMain.on('translate:audio-commit', (event) => {
@@ -355,11 +363,18 @@ ipcMain.on('translate:audio-commit', (event) => {
     return;
   }
 
+  // Avoid server-side "buffer too small" by committing only when at least 100ms is buffered.
+  if (!session.pendingSamples || session.pendingSamples < MIN_COMMIT_SAMPLES) {
+    return;
+  }
+
   session.ws.send(
     JSON.stringify({
       type: 'input_audio_buffer.commit',
     }),
   );
+
+  session.pendingSamples = 0;
 
   session.ws.send(
     JSON.stringify({

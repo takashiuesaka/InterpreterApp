@@ -18,8 +18,10 @@ let muteGainNode = null;
 let running = false;
 let commitTimer = null;
 let bufferedChunkCount = 0;
+let bufferedSampleCount = 0;
 
 const TARGET_SAMPLE_RATE = 24000;
+const MIN_COMMIT_SAMPLES = 2400; // 100ms at 24kHz
 
 function setStatus(message, isError) {
   statusBox.textContent = message;
@@ -101,6 +103,7 @@ async function stopRealtimeTranslation() {
   }
 
   bufferedChunkCount = 0;
+  bufferedSampleCount = 0;
 
   if (processorNode) {
     try {
@@ -198,6 +201,7 @@ async function startRealtimeTranslation() {
       const audioBase64 = int16ToBase64(int16);
       window.translatorApi.appendAudioChunk(audioBase64);
       bufferedChunkCount += 1;
+      bufferedSampleCount += int16.length;
     };
 
     sourceNode.connect(processorNode);
@@ -216,8 +220,13 @@ async function startRealtimeTranslation() {
         return;
       }
 
+      if (bufferedSampleCount < MIN_COMMIT_SAMPLES) {
+        return;
+      }
+
       window.translatorApi.commitAudioBuffer();
       bufferedChunkCount = 0;
+      bufferedSampleCount = 0;
     }, 700);
 
     setStatus('Realtime翻訳中... マイク入力を日本語へ変換しています。');
