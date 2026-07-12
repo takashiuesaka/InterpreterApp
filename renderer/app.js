@@ -5,19 +5,11 @@ const stopButton = document.getElementById('stopButton');
 const clearButton = document.getElementById('clearButton');
 const statusBox = document.getElementById('status');
 
-let unsubscribeDeltaListener = null;
-let unsubscribeDoneListener = null;
-let unsubscribeErrorListener = null;
-let unsubscribeSessionListener = null;
-
 let mediaStream = null;
-let audioContext = null;
-let sourceNode = null;
-let processorNode = null;
-let muteGainNode = null;
+let peerConnection = null;
+let dataChannel = null;
 let running = false;
-
-const TARGET_SAMPLE_RATE = 24000;
+let remoteAudioElement = null;
 
 function setStatus(message, isError) {
   statusBox.textContent = message;
@@ -33,57 +25,6 @@ function appendTranslationDelta(delta) {
   translatedText.scrollTop = translatedText.scrollHeight;
 }
 
-function downsampleFloat32(input, inputSampleRate, outputSampleRate) {
-  if (outputSampleRate >= inputSampleRate) {
-    return input;
-  }
-
-  const sampleRateRatio = inputSampleRate / outputSampleRate;
-  const newLength = Math.floor(input.length / sampleRateRatio);
-  const result = new Float32Array(newLength);
-  let offsetResult = 0;
-  let offsetBuffer = 0;
-
-  while (offsetResult < result.length) {
-    const nextOffsetBuffer = Math.floor((offsetResult + 1) * sampleRateRatio);
-    let accum = 0;
-    let count = 0;
-
-    for (let i = offsetBuffer; i < nextOffsetBuffer && i < input.length; i += 1) {
-      accum += input[i];
-      count += 1;
-    }
-
-    result[offsetResult] = count > 0 ? accum / count : 0;
-    offsetResult += 1;
-    offsetBuffer = nextOffsetBuffer;
-  }
-
-  return result;
-}
-
-function convertFloat32ToInt16(float32Samples) {
-  const int16 = new Int16Array(float32Samples.length);
-  for (let i = 0; i < float32Samples.length; i += 1) {
-    const s = Math.max(-1, Math.min(1, float32Samples[i]));
-    int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-  }
-  return int16;
-}
-
-function int16ToBase64(int16Samples) {
-  const bytes = new Uint8Array(int16Samples.buffer);
-  let binary = '';
-  const chunkSize = 0x8000;
-
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, i + chunkSize);
-    binary += String.fromCharCode.apply(null, chunk);
-  }
-
-  return btoa(binary);
-}
-
 function updateButtons(isRunning) {
   startButton.disabled = isRunning;
   stopButton.disabled = !isRunning;
@@ -93,32 +34,22 @@ async function stopRealtimeTranslation() {
   running = false;
   updateButtons(false);
 
-  if (processorNode) {
+  if (dataChannel) {
     try {
-      processorNode.disconnect();
+      dataChannel.close();
     } catch {
       // no-op
     }
-    processorNode.onaudioprocess = null;
-    processorNode = null;
+    dataChannel = null;
   }
 
-  if (sourceNode) {
+  if (peerConnection) {
     try {
-      sourceNode.disconnect();
+      peerConnection.close();
     } catch {
       // no-op
     }
-    sourceNode = null;
-  }
-
-  if (muteGainNode) {
-    try {
-      muteGainNode.disconnect();
-    } catch {
-      // no-op
-    }
-    muteGainNode = null;
+    peerConnection = null;
   }
 
   if (mediaStream) {
@@ -126,13 +57,8 @@ async function stopRealtimeTranslation() {
     mediaStream = null;
   }
 
-  if (audioContext) {
-    try {
-      await audioContext.close();
-    } catch {
-      // no-op
-    }
-    audioContext = null;
+  if (remoteAudioElement) {
+    remoteAudioElement.srcObject = null;
   }
 
   try {
@@ -155,6 +81,8 @@ async function startRealtimeTranslation() {
   setStatus('Realtime翻訳セッションを開始しています...');
 
   try {
+    const session = await window.translatorApi.startRealtimeAudioTranslation(targetLanguage.value);
+
     mediaStream = await navigator.mediaDevices.getUserMedia({
       audio: {
         channelCount: 1,
@@ -164,40 +92,114 @@ async function startRealtimeTranslation() {
       video: false,
     });
 
-    audioContext = new AudioContext();
-    await audioContext.resume();
+    const { ephemeralKey, callsUrl } = session || {};
+    if (!ephemeralKey || !callsUrl) {
+      throw new Error('WebRTC session parameters were not returned from main process.');
+    }
 
-    await window.translatorApi.startRealtimeAudioTranslation(targetLanguage.value);
+    peerConnection = new RTCPeerConnection();
 
-    sourceNode = audioContext.createMediaStreamSource(mediaStream);
-    processorNode = audioContext.createScriptProcessor(4096, 1, 1);
-    muteGainNode = audioContext.createGain();
-    muteGainNode.gain.value = 0;
+    remoteAudioElement = document.createElement('audio');
+    remoteAudioElement.autoplay = true;
+    remoteAudioElement.style.display = 'none';
+    document.body.appendChild(remoteAudioElement);
 
-    processorNode.onaudioprocess = (event) => {
-      if (!running) {
+    peerConnection.ontrack = (event) => {
+      if (event.streams.length > 0) {
+        remoteAudioElement.srcObject = event.streams[0];
+      }
+    };
+
+    const audioTrack = mediaStream.getAudioTracks()[0];
+    if (!audioTrack) {
+      throw new Error('No microphone audio track found.');
+    }
+
+    peerConnection.addTrack(audioTrack, mediaStream);
+    dataChannel = peerConnection.createDataChannel('realtime-channel');
+
+    dataChannel.addEventListener('message', (event) => {
+      let realtimeEvent;
+      try {
+        realtimeEvent = JSON.parse(event.data);
+      } catch {
         return;
       }
 
-      const inputSamples = event.inputBuffer.getChannelData(0);
-      const downsampled = downsampleFloat32(
-        inputSamples,
-        audioContext.sampleRate,
-        TARGET_SAMPLE_RATE,
+      if (realtimeEvent?.type === 'error') {
+        const message = realtimeEvent?.error?.message || 'Unknown realtime error.';
+        setStatus(`翻訳エラー: ${message}`, true);
+        return;
+      }
+
+      if (realtimeEvent?.type === 'response.output_text.delta') {
+        appendTranslationDelta(realtimeEvent?.delta || '');
+        return;
+      }
+
+      if (realtimeEvent?.type === 'response.audio_transcript.delta') {
+        appendTranslationDelta(realtimeEvent?.delta || '');
+        return;
+      }
+
+      if (realtimeEvent?.type === 'response.output_text.done') {
+        appendTranslationDelta('\n');
+      }
+    });
+
+    dataChannel.addEventListener('open', () => {
+      dataChannel.send(
+        JSON.stringify({
+          type: 'session.update',
+          session: {
+            instructions:
+              targetLanguage.value === 'ja'
+                ? 'Translate user speech from English to Japanese. Output Japanese text only.'
+                : `Translate user speech into ${targetLanguage.value}. Output translated text only.`,
+            turn_detection: {
+              type: 'server_vad',
+              create_response: true,
+            },
+          },
+        }),
       );
-      const int16 = convertFloat32ToInt16(downsampled);
-      const audioBase64 = int16ToBase64(int16);
-      window.translatorApi.appendAudioChunk(audioBase64);
+    });
+
+    peerConnection.onconnectionstatechange = () => {
+      if (peerConnection && peerConnection.connectionState === 'failed') {
+        setStatus('WebRTC接続が失敗しました。再開してください。', true);
+      }
     };
 
-    sourceNode.connect(processorNode);
-    processorNode.connect(muteGainNode);
-    muteGainNode.connect(audioContext.destination);
+    const offer = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offer);
+
+    const sdpResponse = await fetch(callsUrl, {
+      method: 'POST',
+      body: offer.sdp,
+      headers: {
+        Authorization: `Bearer ${ephemeralKey}`,
+        'Content-Type': 'application/sdp',
+      },
+    });
+
+    if (!sdpResponse.ok) {
+      const responseText = await sdpResponse.text();
+      throw new Error(
+        `SDP exchange failed (${sdpResponse.status} ${sdpResponse.statusText}): ${responseText.slice(0, 500)}`,
+      );
+    }
+
+    const answerSdp = await sdpResponse.text();
+    await peerConnection.setRemoteDescription({
+      type: 'answer',
+      sdp: answerSdp,
+    });
 
     running = true;
     updateButtons(true);
 
-    setStatus('Realtime翻訳中... マイク入力を日本語へ変換しています。');
+    setStatus('WebRTC Realtime翻訳中... マイク入力を日本語へ変換しています。');
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     setStatus(`開始エラー: ${message}`, true);
@@ -220,35 +222,10 @@ clearButton.addEventListener('click', () => {
 async function initialize() {
   updateButtons(false);
 
-  unsubscribeDeltaListener = window.translatorApi.onTranslationDelta((payload) => {
-    const delta = payload?.delta;
-    if (typeof delta !== 'string') {
-      return;
-    }
-
-    appendTranslationDelta(delta);
-  });
-
-  unsubscribeDoneListener = window.translatorApi.onTranslationDone(() => {
-    appendTranslationDelta('\n');
-  });
-
-  unsubscribeErrorListener = window.translatorApi.onTranslationError((payload) => {
-    const message = payload?.message || 'Unknown realtime translation error.';
-    setStatus(`翻訳エラー: ${message}`, true);
-  });
-
-  unsubscribeSessionListener = window.translatorApi.onSessionState((payload) => {
-    if (payload?.state === 'closed' && running) {
-      setStatus('Realtimeセッションが切断されました。再開してください。', true);
-      stopRealtimeTranslation();
-    }
-  });
-
   try {
     const health = await window.translatorApi.healthCheck();
     if (health.ready) {
-      setStatus('準備完了。Start でRealtime翻訳を開始してください。');
+      setStatus('準備完了。Start でWebRTC Realtime翻訳を開始してください。');
       return;
     }
 
@@ -265,20 +242,4 @@ initialize();
 
 window.addEventListener('beforeunload', () => {
   stopRealtimeTranslation();
-
-  if (typeof unsubscribeDeltaListener === 'function') {
-    unsubscribeDeltaListener();
-  }
-
-  if (typeof unsubscribeDoneListener === 'function') {
-    unsubscribeDoneListener();
-  }
-
-  if (typeof unsubscribeErrorListener === 'function') {
-    unsubscribeErrorListener();
-  }
-
-  if (typeof unsubscribeSessionListener === 'function') {
-    unsubscribeSessionListener();
-  }
 });
