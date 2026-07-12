@@ -1,0 +1,32 @@
+{
+  "name": "interpreterapp",
+  "version": "1.0.0",
+  "description": "Electron Forge を使用したリアルタイム翻訳デスクトップアプリの開発リポジトリ。",
+  "main": "main.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "electron-forge start",
+    "package": "electron-forge package",
+    "make": "electron-forge make",
+    "publish": "electron-forge publish"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/takashiuesaka/InterpreterApp.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/takashiuesaka/InterpreterApp/issues"
+  },
+  "homepage": "https://github.com/takashiuesaka/InterpreterApp#readme",
+  "devDependencies": {
+    "@electron-forge/cli": "^7.11.2",
+    "electron": "^43.1.0"
+  }
+}
