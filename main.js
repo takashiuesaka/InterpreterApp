@@ -62,32 +62,32 @@ function getFoundryConfig() {
 function buildSessionConfig(deployment, targetLanguage) {
   return {
     session: {
-      type: 'realtime',
-      model: deployment,
       instructions:
         targetLanguage === 'ja'
           ? 'Translate user speech from English to Japanese. Output Japanese text only.'
           : `Translate user speech into ${targetLanguage}. Output translated text only.`,
-      input_audio_format: 'pcm16',
-      turn_detection: {
-        type: 'server_vad',
-        create_response: true,
+      audio: {
+        output: {
+          language: targetLanguage,
+        },
       },
     },
   };
 }
 
-function buildWebRtcEndpointCandidates(endpoint) {
+function buildWebRtcEndpointCandidates(endpoint, deployment) {
+  const encodedModel = encodeURIComponent(deployment);
+
   return [
     {
-      label: 'realtime',
-      clientSecretsUrl: `${endpoint}/openai/v1/realtime/client_secrets`,
-      callsUrl: `${endpoint}/openai/v1/realtime/calls?webrtcfilter=on`,
+      label: 'realtime-translations',
+      clientSecretsUrl: `${endpoint}/openai/v1/realtime/translations/client_secrets?model=${encodedModel}`,
+      callsUrl: `${endpoint}/openai/v1/realtime/translations/calls?model=${encodedModel}&webrtcfilter=on`,
     },
     {
-      label: 'realtime-translations',
-      clientSecretsUrl: `${endpoint}/openai/v1/realtime/translations/client_secrets`,
-      callsUrl: `${endpoint}/openai/v1/realtime/translations/calls?webrtcfilter=on`,
+      label: 'realtime',
+      clientSecretsUrl: `${endpoint}/openai/v1/realtime/client_secrets?model=${encodedModel}`,
+      callsUrl: `${endpoint}/openai/v1/realtime/calls?model=${encodedModel}&webrtcfilter=on`,
     },
   ];
 }
@@ -95,7 +95,7 @@ function buildWebRtcEndpointCandidates(endpoint) {
 async function createEphemeralToken(targetLanguage) {
   const config = getFoundryConfig();
   const accessToken = await getAccessToken();
-  const endpointCandidates = buildWebRtcEndpointCandidates(config.endpoint);
+  const endpointCandidates = buildWebRtcEndpointCandidates(config.endpoint, config.deployment);
   const errors = [];
 
   for (const candidate of endpointCandidates) {

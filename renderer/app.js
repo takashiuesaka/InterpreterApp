@@ -156,9 +156,10 @@ async function startRealtimeTranslation() {
               targetLanguage.value === 'ja'
                 ? 'Translate user speech from English to Japanese. Output Japanese text only.'
                 : `Translate user speech into ${targetLanguage.value}. Output translated text only.`,
-            turn_detection: {
-              type: 'server_vad',
-              create_response: true,
+            audio: {
+              output: {
+                language: targetLanguage.value,
+              },
             },
           },
         }),
