@@ -3,14 +3,17 @@ const targetLanguage = document.getElementById('targetLanguage');
 const startButton = document.getElementById('startButton');
 const stopButton = document.getElementById('stopButton');
 const clearButton = document.getElementById('clearButton');
+const clearEventLogButton = document.getElementById('clearEventLogButton');
 const statusBox = document.getElementById('status');
 const micLevelBar = document.getElementById('micLevelBar');
 const micLevelValue = document.getElementById('micLevelValue');
+const eventLog = document.getElementById('eventLog');
 
 let unsubscribeDeltaListener = null;
 let unsubscribeDoneListener = null;
 let unsubscribeErrorListener = null;
 let unsubscribeSessionListener = null;
+let unsubscribeRealtimeEventListener = null;
 
 let mediaStream = null;
 let audioContext = null;
@@ -20,6 +23,33 @@ let muteGainNode = null;
 let running = false;
 
 const TARGET_SAMPLE_RATE = 24000;
+const MAX_EVENT_LOG_LINES = 200;
+
+function formatTimestamp(epochMillis) {
+  const date = new Date(epochMillis);
+  const hh = String(date.getHours()).padStart(2, '0');
+  const mm = String(date.getMinutes()).padStart(2, '0');
+  const ss = String(date.getSeconds()).padStart(2, '0');
+  const ms = String(date.getMilliseconds()).padStart(3, '0');
+  return `${hh}:${mm}:${ss}.${ms}`;
+}
+
+function pushEventLogLine(text, isError) {
+  const line = document.createElement('div');
+  line.className = isError ? 'event-log-line error' : 'event-log-line';
+  line.textContent = text;
+  eventLog.appendChild(line);
+
+  while (eventLog.childElementCount > MAX_EVENT_LOG_LINES) {
+    eventLog.removeChild(eventLog.firstElementChild);
+  }
+
+  eventLog.scrollTop = eventLog.scrollHeight;
+}
+
+function clearEventLog() {
+  eventLog.textContent = '';
+}
 
 function updateMicLevel(levelRatio) {
   const clamped = Math.max(0, Math.min(1, levelRatio));
@@ -169,6 +199,8 @@ async function stopRealtimeTranslation() {
   if (!statusBox.classList.contains('error')) {
     setStatus('停止しました。Start で再開できます。');
   }
+
+  pushEventLogLine(`[${formatTimestamp(Date.now())}] client: stop requested`, false);
 }
 
 async function startRealtimeTranslation() {
@@ -177,6 +209,8 @@ async function startRealtimeTranslation() {
   }
 
   translatedText.value = '';
+  clearEventLog();
+  pushEventLogLine(`[${formatTimestamp(Date.now())}] client: start requested`, false);
   setStatus('Realtime翻訳セッションを開始しています...');
 
   try {
@@ -227,9 +261,11 @@ async function startRealtimeTranslation() {
     updateButtons(true);
 
     setStatus('WebSocket Realtime翻訳中... マイク入力を日本語へ変換しています。');
+    pushEventLogLine(`[${formatTimestamp(Date.now())}] client: audio stream active`, false);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     setStatus(`開始エラー: ${message}`, true);
+    pushEventLogLine(`[${formatTimestamp(Date.now())}] client error: ${message}`, true);
     await stopRealtimeTranslation();
   }
 }
@@ -246,6 +282,11 @@ clearButton.addEventListener('click', () => {
   translatedText.value = '';
 });
 
+clearEventLogButton.addEventListener('click', () => {
+  clearEventLog();
+  pushEventLogLine(`[${formatTimestamp(Date.now())}] client: event log cleared`, false);
+});
+
 async function initialize() {
   updateButtons(false);
   updateMicLevel(0);
@@ -257,22 +298,44 @@ async function initialize() {
     }
 
     appendTranslationDelta(delta);
+    pushEventLogLine(
+      `[${formatTimestamp(Date.now())}] ui: translate:delta (${delta.length}) ${delta.slice(0, 80)}`,
+      false,
+    );
   });
 
-  unsubscribeDoneListener = window.translatorApi.onTranslationDone(() => {
+  unsubscribeDoneListener = window.translatorApi.onTranslationDone((payload) => {
     appendTranslationDelta('\n');
+    const text = typeof payload?.text === 'string' ? payload.text : '';
+    pushEventLogLine(
+      `[${formatTimestamp(Date.now())}] ui: translate:done (${text.length}) ${text.slice(0, 80)}`,
+      false,
+    );
   });
 
   unsubscribeErrorListener = window.translatorApi.onTranslationError((payload) => {
     const message = payload?.message || 'Unknown realtime translation error.';
     setStatus(`翻訳エラー: ${message}`, true);
+    pushEventLogLine(`[${formatTimestamp(Date.now())}] ui error: ${message}`, true);
   });
 
   unsubscribeSessionListener = window.translatorApi.onSessionState((payload) => {
+    pushEventLogLine(
+      `[${formatTimestamp(Date.now())}] ui: session state = ${payload?.state || 'unknown'}`,
+      false,
+    );
     if (payload?.state === 'closed' && running) {
       setStatus('Realtimeセッションが切断されました。再開してください。', true);
       stopRealtimeTranslation();
     }
+  });
+
+  unsubscribeRealtimeEventListener = window.translatorApi.onRealtimeEvent((payload) => {
+    const eventType = payload?.eventType || 'unknown';
+    const message = payload?.message || 'event received';
+    const timestamp = typeof payload?.timestamp === 'number' ? payload.timestamp : Date.now();
+    const isError = eventType === 'error';
+    pushEventLogLine(`[${formatTimestamp(timestamp)}] server: ${eventType} | ${message}`, isError);
   });
 
   try {
@@ -288,6 +351,7 @@ async function initialize() {
     );
   } catch (error) {
     setStatus(`初期化エラー: ${String(error)}`, true);
+    pushEventLogLine(`[${formatTimestamp(Date.now())}] init error: ${String(error)}`, true);
   }
 }
 
@@ -310,5 +374,9 @@ window.addEventListener('beforeunload', () => {
 
   if (typeof unsubscribeSessionListener === 'function') {
     unsubscribeSessionListener();
+  }
+
+  if (typeof unsubscribeRealtimeEventListener === 'function') {
+    unsubscribeRealtimeEventListener();
   }
 });

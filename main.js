@@ -232,6 +232,44 @@ function extractTextFromResponseDone(event) {
     .trim();
 }
 
+function summarizeRealtimeEvent(event) {
+  const eventType = event?.type || 'unknown';
+
+  if (eventType === 'error') {
+    return event?.error?.message || 'Unknown error';
+  }
+
+  if (
+    eventType === 'response.output_text.delta' ||
+    eventType === 'response.text.delta' ||
+    eventType === 'response.audio_transcript.delta'
+  ) {
+    const delta =
+      typeof event?.delta === 'string'
+        ? event.delta
+        : typeof event?.text === 'string'
+          ? event.text
+          : '';
+    return `delta(${delta.length}): ${delta.slice(0, 80)}`;
+  }
+
+  if (
+    eventType === 'response.output_text.done' ||
+    eventType === 'response.text.done' ||
+    eventType === 'response.done'
+  ) {
+    const doneText =
+      typeof event?.text === 'string' ? event.text : extractTextFromResponseDone(event);
+    return `done(${doneText.length}): ${doneText.slice(0, 80)}`;
+  }
+
+  if (eventType === 'session.updated') {
+    return 'session updated';
+  }
+
+  return 'event received';
+}
+
 async function startRealtimeSession(webContents, targetLanguage) {
   const webContentsId = webContents.id;
   closeRealtimeSession(webContentsId);
@@ -274,6 +312,13 @@ async function startRealtimeSession(webContents, targetLanguage) {
       } catch {
         return;
       }
+
+      webContents.send('translate:event', {
+        source: 'server',
+        eventType: event?.type || 'unknown',
+        message: summarizeRealtimeEvent(event),
+        timestamp: Date.now(),
+      });
 
       if (event?.type === 'error') {
         const message = event?.error?.message || 'Realtime API error';

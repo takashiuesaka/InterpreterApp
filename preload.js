@@ -50,6 +50,15 @@ contextBridge.exposeInMainWorld('translatorApi', {
       ipcRenderer.removeListener('translate:session', listener);
     };
   },
+  onRealtimeEvent: (callback) => {
+    const listener = (_event, payload) => {
+      callback(payload);
+    };
+    ipcRenderer.on('translate:event', listener);
+    return () => {
+      ipcRenderer.removeListener('translate:event', listener);
+    };
+  },
   healthCheck: async () => {
     return ipcRenderer.invoke('translate:health');
   },
