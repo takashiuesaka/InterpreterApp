@@ -21,6 +21,16 @@
           <option value="ja" selected>Japanese (ja)</option>
         </select>
 
+        <div class="mic-monitor" aria-live="polite">
+          <div class="mic-monitor-header">
+            <span>Mic Input Level</span>
+            <span id="micLevelValue">0%</span>
+          </div>
+          <div class="mic-level-track" role="meter" aria-label="Microphone input level">
+            <div id="micLevelBar" class="mic-level-bar"></div>
+          </div>
+        </div>
+
         <div class="actions">
           <button id="startButton" type="button">Start Realtime Translation</button>
           <button id="stopButton" type="button" disabled>Stop</button>

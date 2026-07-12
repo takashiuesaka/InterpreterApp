@@ -4,6 +4,8 @@ const startButton = document.getElementById('startButton');
 const stopButton = document.getElementById('stopButton');
 const clearButton = document.getElementById('clearButton');
 const statusBox = document.getElementById('status');
+const micLevelBar = document.getElementById('micLevelBar');
+const micLevelValue = document.getElementById('micLevelValue');
 
 let unsubscribeDeltaListener = null;
 let unsubscribeDoneListener = null;
@@ -18,6 +20,28 @@ let muteGainNode = null;
 let running = false;
 
 const TARGET_SAMPLE_RATE = 24000;
+
+function updateMicLevel(levelRatio) {
+  const clamped = Math.max(0, Math.min(1, levelRatio));
+  const percent = Math.round(clamped * 100);
+  micLevelBar.style.width = `${percent}%`;
+  micLevelValue.textContent = `${percent}%`;
+}
+
+function calculateRmsLevel(float32Samples) {
+  if (!float32Samples || float32Samples.length === 0) {
+    return 0;
+  }
+
+  let sumSquares = 0;
+  for (let i = 0; i < float32Samples.length; i += 1) {
+    const sample = float32Samples[i];
+    sumSquares += sample * sample;
+  }
+
+  const rms = Math.sqrt(sumSquares / float32Samples.length);
+  return Math.min(1, rms * 6);
+}
 
 function setStatus(message, isError) {
   statusBox.textContent = message;
@@ -92,6 +116,7 @@ function updateButtons(isRunning) {
 async function stopRealtimeTranslation() {
   running = false;
   updateButtons(false);
+  updateMicLevel(0);
 
   if (processorNode) {
     try {
@@ -182,6 +207,9 @@ async function startRealtimeTranslation() {
       }
 
       const inputSamples = event.inputBuffer.getChannelData(0);
+      const level = calculateRmsLevel(inputSamples);
+      updateMicLevel(level);
+
       const downsampled = downsampleFloat32(
         inputSamples,
         audioContext.sampleRate,
@@ -220,6 +248,7 @@ clearButton.addEventListener('click', () => {
 
 async function initialize() {
   updateButtons(false);
+  updateMicLevel(0);
 
   unsubscribeDeltaListener = window.translatorApi.onTranslationDelta((payload) => {
     const delta = payload?.delta;
