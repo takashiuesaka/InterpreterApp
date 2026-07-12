@@ -234,9 +234,6 @@ async function startRealtimeSession(webContents, targetLanguage) {
                 type: 'server_vad',
               },
             },
-            output: {
-              language: targetLanguage,
-            },
           },
         },
       }),
