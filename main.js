@@ -258,10 +258,6 @@ async function startRealtimeSession(webContents, targetLanguage) {
       JSON.stringify({
         type: 'session.update',
         session: {
-          instructions:
-            targetLanguage === 'ja'
-              ? 'Translate user speech from English to Japanese. Output Japanese text only.'
-              : `Translate user speech into ${targetLanguage}. Output translated text only.`,
           audio: {
             output: {
               language: targetLanguage,
