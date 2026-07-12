@@ -242,7 +242,9 @@ function summarizeRealtimeEvent(event) {
   if (
     eventType === 'response.output_text.delta' ||
     eventType === 'response.text.delta' ||
-    eventType === 'response.audio_transcript.delta'
+    eventType === 'response.audio_transcript.delta' ||
+    eventType === 'session.output_text.delta' ||
+    eventType === 'session.output_audio_transcript.delta'
   ) {
     const delta =
       typeof event?.delta === 'string'
@@ -256,7 +258,9 @@ function summarizeRealtimeEvent(event) {
   if (
     eventType === 'response.output_text.done' ||
     eventType === 'response.text.done' ||
-    eventType === 'response.done'
+    eventType === 'response.done' ||
+    eventType === 'session.output_text.done' ||
+    eventType === 'session.output_audio_transcript.done'
   ) {
     const doneText =
       typeof event?.text === 'string' ? event.text : extractTextFromResponseDone(event);
@@ -353,7 +357,9 @@ async function startRealtimeSession(webContents, targetLanguage) {
       const isTextDeltaEvent =
         event?.type === 'response.output_text.delta' ||
         event?.type === 'response.text.delta' ||
-        event?.type === 'response.audio_transcript.delta';
+        event?.type === 'response.audio_transcript.delta' ||
+        event?.type === 'session.output_text.delta' ||
+        event?.type === 'session.output_audio_transcript.delta';
 
       if (isTextDeltaEvent) {
         const delta =
@@ -371,12 +377,23 @@ async function startRealtimeSession(webContents, targetLanguage) {
       const isTextDoneEvent =
         event?.type === 'response.output_text.done' ||
         event?.type === 'response.text.done' ||
-        event?.type === 'response.done';
+        event?.type === 'response.done' ||
+        event?.type === 'session.output_text.done' ||
+        event?.type === 'session.output_audio_transcript.done';
 
       if (isTextDoneEvent) {
         const doneText =
           typeof event?.text === 'string' ? event.text : extractTextFromResponseDone(event);
         webContents.send('translate:done', { text: doneText });
+        return;
+      }
+
+      const isAudioDeltaEvent = event?.type === 'session.output_audio.delta';
+      if (isAudioDeltaEvent) {
+        const audio = typeof event?.delta === 'string' ? event.delta : '';
+        if (audio) {
+          webContents.send('translate:audio-delta', { audio });
+        }
       }
     });
 

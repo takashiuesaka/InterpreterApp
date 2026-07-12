@@ -14,6 +14,7 @@ let unsubscribeDoneListener = null;
 let unsubscribeErrorListener = null;
 let unsubscribeSessionListener = null;
 let unsubscribeRealtimeEventListener = null;
+let unsubscribeAudioDeltaListener = null;
 
 let mediaStream = null;
 let audioContext = null;
@@ -21,8 +22,10 @@ let sourceNode = null;
 let processorNode = null;
 let muteGainNode = null;
 let running = false;
+let playbackCursorTime = 0;
 
 const TARGET_SAMPLE_RATE = 24000;
+const OUTPUT_SAMPLE_RATE = 24000;
 const MAX_EVENT_LOG_LINES = 200;
 
 function formatTimestamp(epochMillis) {
@@ -49,6 +52,48 @@ function pushEventLogLine(text, isError) {
 
 function clearEventLog() {
   eventLog.textContent = '';
+}
+
+function playPcm16AudioBase64(audioBase64) {
+  if (!audioContext || !audioBase64) {
+    return;
+  }
+
+  let binary;
+  try {
+    binary = atob(audioBase64);
+  } catch {
+    return;
+  }
+
+  const byteLength = binary.length;
+  if (byteLength < 2) {
+    return;
+  }
+
+  const alignedLength = byteLength - (byteLength % 2);
+  const int16Length = alignedLength / 2;
+  const float32 = new Float32Array(int16Length);
+
+  for (let i = 0; i < int16Length; i += 1) {
+    const lo = binary.charCodeAt(i * 2);
+    const hi = binary.charCodeAt(i * 2 + 1);
+    const value = (hi << 8) | lo;
+    const signed = value >= 0x8000 ? value - 0x10000 : value;
+    float32[i] = signed / 0x8000;
+  }
+
+  const buffer = audioContext.createBuffer(1, int16Length, OUTPUT_SAMPLE_RATE);
+  buffer.copyToChannel(float32, 0);
+
+  const source = audioContext.createBufferSource();
+  source.buffer = buffer;
+  source.connect(audioContext.destination);
+
+  const now = audioContext.currentTime;
+  const startTime = Math.max(now, playbackCursorTime);
+  source.start(startTime);
+  playbackCursorTime = startTime + buffer.duration;
 }
 
 function updateMicLevel(levelRatio) {
@@ -147,6 +192,7 @@ async function stopRealtimeTranslation() {
   running = false;
   updateButtons(false);
   updateMicLevel(0);
+  playbackCursorTime = 0;
 
   if (processorNode) {
     try {
@@ -234,6 +280,7 @@ async function startRealtimeTranslation() {
     muteGainNode.gain.value = 0;
 
     running = true;
+    playbackCursorTime = audioContext.currentTime;
 
     processorNode.onaudioprocess = (event) => {
       if (!running) {
@@ -338,6 +385,15 @@ async function initialize() {
     pushEventLogLine(`[${formatTimestamp(timestamp)}] server: ${eventType} | ${message}`, isError);
   });
 
+  unsubscribeAudioDeltaListener = window.translatorApi.onTranslationAudioDelta((payload) => {
+    const audioBase64 = payload?.audio;
+    if (typeof audioBase64 !== 'string' || audioBase64.length === 0) {
+      return;
+    }
+
+    playPcm16AudioBase64(audioBase64);
+  });
+
   try {
     const health = await window.translatorApi.healthCheck();
     if (health.ready) {
@@ -378,5 +434,9 @@ window.addEventListener('beforeunload', () => {
 
   if (typeof unsubscribeRealtimeEventListener === 'function') {
     unsubscribeRealtimeEventListener();
+  }
+
+  if (typeof unsubscribeAudioDeltaListener === 'function') {
+    unsubscribeAudioDeltaListener();
   }
 });

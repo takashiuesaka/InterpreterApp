@@ -59,6 +59,15 @@ contextBridge.exposeInMainWorld('translatorApi', {
       ipcRenderer.removeListener('translate:event', listener);
     };
   },
+  onTranslationAudioDelta: (callback) => {
+    const listener = (_event, payload) => {
+      callback(payload);
+    };
+    ipcRenderer.on('translate:audio-delta', listener);
+    return () => {
+      ipcRenderer.removeListener('translate:audio-delta', listener);
+    };
+  },
   healthCheck: async () => {
     return ipcRenderer.invoke('translate:health');
   },
