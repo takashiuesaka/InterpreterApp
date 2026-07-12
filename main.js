@@ -223,7 +223,7 @@ async function startRealtimeSession(webContents, targetLanguage) {
       JSON.stringify({
         type: 'session.update',
         session: {
-          type: 'translation',
+          type: 'realtime',
           modalities: ['text'],
           instructions: `You are a real-time interpreter. Translate spoken English into natural ${targetLanguage === 'ja' ? 'Japanese' : targetLanguage}. Output only the translated text in the target language.`,
           input_audio_format: 'pcm16',
