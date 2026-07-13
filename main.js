@@ -361,6 +361,7 @@ async function startRealtimeSession(webContents, targetLanguage) {
         event?.type === 'response.text.delta' ||
         event?.type === 'response.audio_transcript.delta' ||
         event?.type === 'session.output_text.delta' ||
+        event?.type === 'session.output_transcript.delta' ||
         event?.type === 'session.output_audio_transcript.delta';
 
       if (isTextDeltaEvent) {
