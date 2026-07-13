@@ -261,6 +261,7 @@ function summarizeRealtimeEvent(event) {
     eventType === 'response.text.done' ||
     eventType === 'response.done' ||
     eventType === 'session.output_text.done' ||
+    eventType === 'session.output_transcript.done' ||
     eventType === 'session.output_audio_transcript.done'
   ) {
     const doneText =
