@@ -244,6 +244,7 @@ function summarizeRealtimeEvent(event) {
     eventType === 'response.text.delta' ||
     eventType === 'response.audio_transcript.delta' ||
     eventType === 'session.output_text.delta' ||
+    eventType === 'session.output_transcript.delta' ||
     eventType === 'session.output_audio_transcript.delta'
   ) {
     const delta =
