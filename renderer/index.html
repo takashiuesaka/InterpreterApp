@@ -9,7 +9,35 @@
   <body>
     <main class="app">
       <header class="header">
-        <h1>InterpreterApp</h1>
+        <button
+          id="audioMuteToggleButton"
+          type="button"
+          class="audio-icon-button"
+          aria-label="翻訳音声をミュート"
+          aria-pressed="false"
+          title="翻訳音声: 再生中"
+        >
+          <svg class="speaker-icon icon-unmuted" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M5 10v4h4l5 4V6l-5 4H5z" fill="currentColor" />
+            <path
+              d="M17.5 8.5a5 5 0 0 1 0 7"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            />
+          </svg>
+          <svg class="speaker-icon icon-muted" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M5 10v4h4l5 4V6l-5 4H5z" fill="currentColor" />
+            <path
+              d="M4 4L20 20"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            />
+          </svg>
+        </button>
         <p>Microphone to Japanese Realtime Translation</p>
       </header>
 
