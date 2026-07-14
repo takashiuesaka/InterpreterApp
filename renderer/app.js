@@ -3,6 +3,7 @@ const targetLanguage = document.getElementById('targetLanguage');
 const startButton = document.getElementById('startButton');
 const stopButton = document.getElementById('stopButton');
 const clearButton = document.getElementById('clearButton');
+const audioMuteToggleButton = document.getElementById('audioMuteToggleButton');
 const clearEventLogButton = document.getElementById('clearEventLogButton');
 const statusBox = document.getElementById('status');
 const micLevelBar = document.getElementById('micLevelBar');
@@ -23,6 +24,7 @@ let processorNode = null;
 let muteGainNode = null;
 let running = false;
 let playbackCursorTime = 0;
+let isTranslatedAudioMuted = false;
 
 const TARGET_SAMPLE_RATE = 24000;
 const OUTPUT_SAMPLE_RATE = 24000;
@@ -121,6 +123,13 @@ function calculateRmsLevel(float32Samples) {
 function setStatus(message, isError) {
   statusBox.textContent = message;
   statusBox.classList.toggle('error', Boolean(isError));
+}
+
+function renderAudioMuteToggle() {
+  audioMuteToggleButton.textContent = isTranslatedAudioMuted
+    ? '翻訳音声: ミュート中'
+    : '翻訳音声: 再生中';
+  audioMuteToggleButton.setAttribute('aria-pressed', isTranslatedAudioMuted ? 'true' : 'false');
 }
 
 function appendTranslationDelta(delta) {
@@ -329,6 +338,15 @@ clearButton.addEventListener('click', () => {
   translatedText.value = '';
 });
 
+audioMuteToggleButton.addEventListener('click', () => {
+  isTranslatedAudioMuted = !isTranslatedAudioMuted;
+  renderAudioMuteToggle();
+  pushEventLogLine(
+    `[${formatTimestamp(Date.now())}] client: translated audio ${isTranslatedAudioMuted ? 'muted' : 'unmuted'}`,
+    false,
+  );
+});
+
 clearEventLogButton.addEventListener('click', () => {
   clearEventLog();
   pushEventLogLine(`[${formatTimestamp(Date.now())}] client: event log cleared`, false);
@@ -386,6 +404,10 @@ async function initialize() {
   });
 
   unsubscribeAudioDeltaListener = window.translatorApi.onTranslationAudioDelta((payload) => {
+    if (isTranslatedAudioMuted) {
+      return;
+    }
+
     const audioBase64 = payload?.audio;
     if (typeof audioBase64 !== 'string' || audioBase64.length === 0) {
       return;
@@ -412,6 +434,7 @@ async function initialize() {
 }
 
 initialize();
+renderAudioMuteToggle();
 
 window.addEventListener('beforeunload', () => {
   stopRealtimeTranslation();
