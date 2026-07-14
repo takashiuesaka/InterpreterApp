@@ -42,10 +42,23 @@ body {
   min-width: 0;
 }
 
-.header-input-label {
-  font-weight: 600;
+.header-input-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.header-input-control label {
+  margin: 0;
+  font-weight: 700;
   color: var(--text-subtle);
   white-space: nowrap;
+}
+
+.header-input-control select {
+  width: auto;
+  min-width: 220px;
 }
 
 .header-controls {
@@ -289,8 +302,13 @@ button:disabled {
     flex-direction: column;
   }
 
-  .header-input-label {
-    white-space: normal;
+  .header-input-control {
+    width: 100%;
+  }
+
+  .header-input-control select {
+    width: 100%;
+    min-width: 0;
   }
 
   .header-controls {
