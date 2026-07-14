@@ -85,4 +85,12 @@ contextBridge.exposeInMainWorld('translatorApi', {
       content,
     });
   },
+  getAppConfig: async () => {
+    return ipcRenderer.invoke('app:config:get');
+  },
+  saveAppConfig: async (config) => {
+    return ipcRenderer.invoke('app:config:save', {
+      config,
+    });
+  },
 });
