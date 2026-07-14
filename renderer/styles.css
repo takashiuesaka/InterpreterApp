@@ -164,6 +164,10 @@ body {
   padding: 16px;
 }
 
+.config-modal[hidden] {
+  display: none;
+}
+
 .config-modal-card {
   width: min(560px, 100%);
   background: var(--surface);
