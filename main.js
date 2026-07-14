@@ -1,5 +1,6 @@
 const path = require('node:path');
-const { app, BrowserWindow, ipcMain } = require('electron');
+const fs = require('node:fs/promises');
+const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const { InteractiveBrowserCredential } = require('@azure/identity');
 const WebSocket = require('ws');
 
@@ -10,6 +11,7 @@ try {
 }
 
 const FOUNDRY_SCOPE = 'https://cognitiveservices.azure.com/.default';
+const PERSISTED_TRANSLATION_FILENAME = 'translation-output.txt';
 const realtimeSessions = new Map();
 
 let cachedToken = null;
@@ -276,6 +278,10 @@ function summarizeRealtimeEvent(event) {
   return 'event received';
 }
 
+function getPersistedTranslationPath() {
+  return path.join(app.getPath('userData'), PERSISTED_TRANSLATION_FILENAME);
+}
+
 async function startRealtimeSession(webContents, targetLanguage) {
   const webContentsId = webContents.id;
   closeRealtimeSession(webContentsId);
@@ -478,6 +484,73 @@ ipcMain.handle('translate:health', async () => {
     return { ready: true };
   } catch (error) {
     return { ready: false, reason: error.message };
+  }
+});
+
+ipcMain.handle('app:load-persisted-translation', async () => {
+  try {
+    const persistedPath = getPersistedTranslationPath();
+    const content = await fs.readFile(persistedPath, 'utf8');
+    return { ok: true, content };
+  } catch (error) {
+    if (error && typeof error === 'object' && error.code === 'ENOENT') {
+      return { ok: true, content: '' };
+    }
+
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+});
+
+ipcMain.handle('app:save-persisted-translation', async (_event, payload) => {
+  const content = typeof payload?.content === 'string' ? payload.content : '';
+
+  try {
+    const persistedPath = getPersistedTranslationPath();
+    await fs.mkdir(path.dirname(persistedPath), { recursive: true });
+    await fs.writeFile(persistedPath, content, 'utf8');
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+});
+
+ipcMain.handle('app:save-translation-as', async (event, payload) => {
+  const content = typeof payload?.content === 'string' ? payload.content : '';
+  const defaultFileName =
+    typeof payload?.defaultFileName === 'string' && payload.defaultFileName.trim()
+      ? payload.defaultFileName.trim()
+      : 'translation-output.txt';
+
+  const ownerWindow = BrowserWindow.fromWebContents(event.sender);
+  const defaultPath = path.join(app.getPath('documents'), defaultFileName);
+
+  const saveResult = await dialog.showSaveDialog(ownerWindow, {
+    title: 'Save Translation Output',
+    defaultPath,
+    filters: [
+      { name: 'Text Files', extensions: ['txt'] },
+      { name: 'All Files', extensions: ['*'] },
+    ],
+  });
+
+  if (saveResult.canceled || !saveResult.filePath) {
+    return { canceled: true };
+  }
+
+  try {
+    await fs.writeFile(saveResult.filePath, content, 'utf8');
+    return { ok: true, filePath: saveResult.filePath };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
 });
 

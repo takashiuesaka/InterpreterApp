@@ -172,6 +172,41 @@ body {
   margin-bottom: 8px;
 }
 
+.output-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.output-header label {
+  margin-bottom: 0;
+}
+
+.output-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.icon-button {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.save-icon {
+  width: 20px;
+  height: 20px;
+}
+
 .mic-monitor {
   flex: 1 1 240px;
   min-width: 160px;
