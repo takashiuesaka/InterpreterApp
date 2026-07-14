@@ -518,7 +518,6 @@ async function startRealtimeTranslation() {
     return;
   }
 
-  translatedText.value = '';
   clearEventLog();
   pushEventLogLine(`[${formatTimestamp(Date.now())}] client: start requested`, false);
   setStatus('Realtime翻訳セッションを開始しています...');
