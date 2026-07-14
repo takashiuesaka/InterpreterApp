@@ -30,12 +30,40 @@ body {
 .header {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
-.header p {
-  margin: 0;
+.header-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.header-input-label {
+  font-weight: 600;
   color: var(--text-subtle);
+  white-space: nowrap;
+}
+
+.header-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.header-controls label {
+  margin: 0;
+  font-weight: 700;
+  color: var(--text-subtle);
+}
+
+.header-controls select {
+  width: auto;
+  min-width: 150px;
 }
 
 .audio-icon-button {
@@ -256,6 +284,23 @@ button:disabled {
 }
 
 @media (max-width: 900px) {
+  .header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .header-input-label {
+    white-space: normal;
+  }
+
+  .header-controls {
+    width: 100%;
+  }
+
+  .header-controls select {
+    width: 100%;
+  }
+
   .panel-grid {
     grid-template-columns: 1fr;
   }
