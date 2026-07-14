@@ -5,11 +5,13 @@ const audioMuteToggleButton = document.getElementById('audioMuteToggleButton');
 const startButton = document.getElementById('startButton');
 const stopButton = document.getElementById('stopButton');
 const clearButton = document.getElementById('clearButton');
+const toggleEventLogButton = document.getElementById('toggleEventLogButton');
 const clearEventLogButton = document.getElementById('clearEventLogButton');
 const statusBox = document.getElementById('status');
 const micLevelBar = document.getElementById('micLevelBar');
 const micLevelValue = document.getElementById('micLevelValue');
 const eventLog = document.getElementById('eventLog');
+const eventLogPanel = document.getElementById('eventLogPanel');
 
 let unsubscribeDeltaListener = null;
 let unsubscribeDoneListener = null;
@@ -29,6 +31,7 @@ let isTranslatedAudioMuted = false;
 let selectedInputDeviceId = 'default';
 let isSwitchingInputDevice = false;
 let deviceChangeListener = null;
+let isEventLogVisible = true;
 
 const TARGET_SAMPLE_RATE = 24000;
 const OUTPUT_SAMPLE_RATE = 24000;
@@ -59,6 +62,17 @@ function pushEventLogLine(text, isError) {
 
 function clearEventLog() {
   eventLog.textContent = '';
+}
+
+function renderEventLogVisibility() {
+  if (isEventLogVisible) {
+    eventLogPanel.classList.remove('event-log-collapsed');
+    toggleEventLogButton.textContent = 'Hide Event Log';
+    return;
+  }
+
+  eventLogPanel.classList.add('event-log-collapsed');
+  toggleEventLogButton.textContent = 'Show Event Log';
 }
 
 function playPcm16AudioBase64(audioBase64) {
@@ -533,6 +547,11 @@ clearEventLogButton.addEventListener('click', () => {
   pushEventLogLine(`[${formatTimestamp(Date.now())}] client: event log cleared`, false);
 });
 
+toggleEventLogButton.addEventListener('click', () => {
+  isEventLogVisible = !isEventLogVisible;
+  renderEventLogVisibility();
+});
+
 async function initialize() {
   updateButtons(false);
   updateMicLevel(0);
@@ -647,6 +666,7 @@ async function initialize() {
 
 initialize();
 renderAudioMuteToggle();
+renderEventLogVisibility();
 
 window.addEventListener('beforeunload', () => {
   stopRealtimeTranslation();
