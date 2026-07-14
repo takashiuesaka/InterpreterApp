@@ -9,18 +9,51 @@
   <body>
     <main class="app">
       <header class="header">
-        <h1>InterpreterApp</h1>
-        <p>Microphone to Japanese Realtime Translation</p>
+        <div class="header-main">
+          <button
+            id="audioMuteToggleButton"
+            type="button"
+            class="audio-icon-button"
+            aria-label="翻訳音声をミュート"
+            aria-pressed="false"
+            title="翻訳音声: 再生中"
+          >
+            <svg class="speaker-icon icon-unmuted" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 10v4h4l5 4V6l-5 4H5z" fill="currentColor" />
+              <path
+                d="M17.5 8.5a5 5 0 0 1 0 7"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              />
+            </svg>
+            <svg class="speaker-icon icon-muted" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 10v4h4l5 4V6l-5 4H5z" fill="currentColor" />
+              <path
+                d="M4 4L20 20"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              />
+            </svg>
+          </button>
+
+          <span class="header-input-label">Input: Microphone</span>
+        </div>
+
+        <div class="header-controls">
+          <label for="targetLanguage">Target:</label>
+          <select id="targetLanguage">
+            <option value="ja" selected>Japanese</option>
+          </select>
+        </div>
       </header>
 
       <section class="status" id="status">初期化中...</section>
 
       <section class="panel">
-        <label for="targetLanguage">Target Language</label>
-        <select id="targetLanguage">
-          <option value="ja" selected>Japanese (ja)</option>
-        </select>
-
         <div class="mic-monitor" aria-live="polite">
           <div class="mic-monitor-header">
             <span>Mic Input Level</span>
@@ -32,7 +65,7 @@
         </div>
 
         <div class="actions">
-          <button id="startButton" type="button">Start Realtime Translation</button>
+          <button id="startButton" type="button">Start</button>
           <button id="stopButton" type="button" disabled>Stop</button>
           <button id="clearButton" type="button" class="secondary">Clear Output</button>
         </div>

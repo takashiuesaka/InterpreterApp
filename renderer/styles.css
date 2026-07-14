@@ -27,14 +27,82 @@ body {
   padding: 24px;
 }
 
-.header h1 {
-  margin: 0;
-  font-size: 2rem;
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
-.header p {
-  margin: 8px 0 0;
+.header-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.header-input-label {
+  font-weight: 600;
   color: var(--text-subtle);
+  white-space: nowrap;
+}
+
+.header-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.header-controls label {
+  margin: 0;
+  font-weight: 700;
+  color: var(--text-subtle);
+}
+
+.header-controls select {
+  width: auto;
+  min-width: 150px;
+}
+
+.audio-icon-button {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #eef3ff;
+  color: var(--primary-strong);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.audio-icon-button:hover {
+  background: #dde9ff;
+}
+
+.audio-icon-button.muted {
+  background: #f3f4f6;
+  color: #98a2b3;
+}
+
+.speaker-icon {
+  width: 28px;
+  height: 28px;
+}
+
+.audio-icon-button .icon-muted {
+  display: none;
+}
+
+.audio-icon-button.muted .icon-unmuted {
+  display: none;
+}
+
+.audio-icon-button.muted .icon-muted {
+  display: block;
 }
 
 .status {
@@ -173,7 +241,9 @@ textarea:focus {
   margin-top: 10px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .toggle {
@@ -214,6 +284,23 @@ button:disabled {
 }
 
 @media (max-width: 900px) {
+  .header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .header-input-label {
+    white-space: normal;
+  }
+
+  .header-controls {
+    width: 100%;
+  }
+
+  .header-controls select {
+    width: 100%;
+  }
+
   .panel-grid {
     grid-template-columns: 1fr;
   }
