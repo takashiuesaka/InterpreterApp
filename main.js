@@ -695,7 +695,7 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
-  await authenticateAtStartup();
+  authenticateAtStartup();
   createWindow();
 
   app.on('web-contents-created', (_appEvent, contents) => {

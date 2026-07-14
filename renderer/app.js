@@ -153,13 +153,15 @@ async function refreshHealthStatus() {
       if (!running) {
         setStatus('準備完了。Start でWebSocket Realtime翻訳を開始してください。');
       }
-      return;
+      return true;
     }
 
     setStatus(`構成または認証エラー: ${health.reason}`, true);
+    return false;
   } catch (error) {
     setStatus(`初期化エラー: ${String(error)}`, true);
     pushEventLogLine(`[${formatTimestamp(Date.now())}] init error: ${String(error)}`, true);
+    return false;
   }
 }
 
@@ -869,7 +871,10 @@ async function initialize() {
       return;
     }
 
-    await refreshHealthStatus();
+    const healthy = await refreshHealthStatus();
+    if (!healthy) {
+      openConfigModal(true);
+    }
   } catch {
     setStatus('構成の初期化に失敗しました。', true);
     openConfigModal(true);
