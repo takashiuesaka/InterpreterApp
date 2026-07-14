@@ -4,6 +4,7 @@ const targetLanguage = document.getElementById('targetLanguage');
 const audioMuteToggleButton = document.getElementById('audioMuteToggleButton');
 const startButton = document.getElementById('startButton');
 const stopButton = document.getElementById('stopButton');
+const saveButton = document.getElementById('saveButton');
 const clearButton = document.getElementById('clearButton');
 const toggleEventLogButton = document.getElementById('toggleEventLogButton');
 const clearEventLogButton = document.getElementById('clearEventLogButton');
@@ -32,11 +33,13 @@ let selectedInputDeviceId = 'default';
 let isSwitchingInputDevice = false;
 let deviceChangeListener = null;
 let isEventLogVisible = true;
+let persistOutputTimer = null;
 
 const TARGET_SAMPLE_RATE = 24000;
 const OUTPUT_SAMPLE_RATE = 24000;
 const MAX_EVENT_LOG_LINES = 200;
 const RUNNING_STATUS_MESSAGE = 'WebSocket Realtime翻訳中... マイク入力を日本語へ変換しています。';
+const OUTPUT_PERSIST_DEBOUNCE_MS = 400;
 
 function formatTimestamp(epochMillis) {
   const date = new Date(epochMillis);
@@ -163,6 +166,42 @@ function appendTranslationDelta(delta) {
 
   translatedText.value += delta;
   translatedText.scrollTop = translatedText.scrollHeight;
+  schedulePersistedOutputSave();
+}
+
+async function persistOutputNow() {
+  try {
+    await window.translatorApi.savePersistedTranslation(translatedText.value);
+  } catch {
+    // Keep the translation flow alive even if persistence fails.
+  }
+}
+
+function schedulePersistedOutputSave() {
+  if (persistOutputTimer) {
+    clearTimeout(persistOutputTimer);
+  }
+
+  persistOutputTimer = setTimeout(() => {
+    persistOutputTimer = null;
+    persistOutputNow();
+  }, OUTPUT_PERSIST_DEBOUNCE_MS);
+}
+
+async function flushPersistedOutputSave() {
+  if (persistOutputTimer) {
+    clearTimeout(persistOutputTimer);
+    persistOutputTimer = null;
+  }
+
+  await persistOutputNow();
+}
+
+function buildSaveFileName() {
+  const now = new Date();
+  const date = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+  const time = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+  return `translation-output-${date}-${time}.txt`;
 }
 
 function downsampleFloat32(input, inputSampleRate, outputSampleRate) {
@@ -465,6 +504,8 @@ async function stopRealtimeTranslation() {
     // no-op
   }
 
+  await flushPersistedOutputSave();
+
   if (!statusBox.classList.contains('error')) {
     setStatus('停止しました。Start で再開できます。');
   }
@@ -477,7 +518,6 @@ async function startRealtimeTranslation() {
     return;
   }
 
-  translatedText.value = '';
   clearEventLog();
   pushEventLogLine(`[${formatTimestamp(Date.now())}] client: start requested`, false);
   setStatus('Realtime翻訳セッションを開始しています...');
@@ -517,6 +557,28 @@ stopButton.addEventListener('click', async () => {
 
 clearButton.addEventListener('click', () => {
   translatedText.value = '';
+  flushPersistedOutputSave();
+});
+
+saveButton.addEventListener('click', async () => {
+  const content = translatedText.value;
+  if (!content.trim()) {
+    setStatus('保存する翻訳結果がありません。');
+    return;
+  }
+
+  const result = await window.translatorApi.saveTranslationAs(buildSaveFileName(), content);
+
+  if (result?.canceled) {
+    return;
+  }
+
+  if (result?.ok) {
+    setStatus(`保存しました: ${result.filePath}`);
+    return;
+  }
+
+  setStatus(`保存エラー: ${result?.error || 'Unknown error'}`, true);
 });
 
 inputDevice.addEventListener('change', async () => {
@@ -556,6 +618,15 @@ async function initialize() {
   updateButtons(false);
   updateMicLevel(0);
   updateInputDeviceDisabledState();
+
+  try {
+    const persisted = await window.translatorApi.loadPersistedTranslation();
+    if (persisted?.ok && typeof persisted?.content === 'string' && persisted.content.length > 0) {
+      translatedText.value = persisted.content;
+    }
+  } catch {
+    // no-op
+  }
 
   try {
     await loadInputDevices();
@@ -669,6 +740,7 @@ renderAudioMuteToggle();
 renderEventLogVisibility();
 
 window.addEventListener('beforeunload', () => {
+  flushPersistedOutputSave();
   stopRealtimeTranslation();
 
   if (typeof unsubscribeDeltaListener === 'function') {

@@ -76,9 +76,9 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
-  flex: 1 1 320px;
-  min-width: 260px;
-  width: min(100%, 900px);
+  flex: 0 0 auto;
+  min-width: 0;
+  width: auto;
   flex-wrap: nowrap;
 }
 
@@ -170,6 +170,41 @@ body {
   display: block;
   font-weight: 700;
   margin-bottom: 8px;
+}
+
+.output-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.output-header label {
+  margin-bottom: 0;
+}
+
+.output-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.icon-button {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.save-icon {
+  width: 20px;
+  height: 20px;
 }
 
 .mic-monitor {

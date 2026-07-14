@@ -49,7 +49,6 @@
             <div class="actions">
               <button id="startButton" type="button">Start</button>
               <button id="stopButton" type="button" disabled>Stop</button>
-              <button id="clearButton" type="button" class="secondary">Clear Output</button>
             </div>
 
             <div class="mic-monitor" aria-live="polite">
@@ -81,7 +80,26 @@
 
       <section class="panel-grid">
         <article class="panel full-width">
-          <label for="translatedText">Realtime Japanese Output</label>
+          <div class="output-header">
+            <label for="translatedText">Realtime Output</label>
+            <div class="output-actions">
+              <button
+                id="saveButton"
+                type="button"
+                class="icon-button secondary"
+                aria-label="Save output"
+                title="Save output"
+              >
+                <svg class="save-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    d="M17 3H5c-1.11 0-2 .89-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zM12 19a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm3-10H5V5h10v4z"
+                    fill="currentColor"
+                  />
+                </svg>
+              </button>
+              <button id="clearButton" type="button" class="secondary">Clear Output</button>
+            </div>
+          </div>
           <textarea id="translatedText" readonly placeholder="Microphone translation appears here..."></textarea>
         </article>
 

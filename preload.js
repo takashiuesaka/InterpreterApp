@@ -71,4 +71,18 @@ contextBridge.exposeInMainWorld('translatorApi', {
   healthCheck: async () => {
     return ipcRenderer.invoke('translate:health');
   },
+  loadPersistedTranslation: async () => {
+    return ipcRenderer.invoke('app:load-persisted-translation');
+  },
+  savePersistedTranslation: async (content) => {
+    return ipcRenderer.invoke('app:save-persisted-translation', {
+      content,
+    });
+  },
+  saveTranslationAs: async (defaultFileName, content) => {
+    return ipcRenderer.invoke('app:save-translation-as', {
+      defaultFileName,
+      content,
+    });
+  },
 });
