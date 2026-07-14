@@ -80,7 +80,7 @@ function clearEventLog() {
 
 function renderConfigModalState() {
   configSaveButton.disabled = isSavingConfig;
-  configCancelButton.disabled = isSavingConfig || isConfigModalRequired;
+  configCancelButton.disabled = isSavingConfig;
 }
 
 function setConfigModalError(message) {
@@ -102,10 +102,7 @@ function openConfigModal(required) {
 }
 
 function closeConfigModal() {
-  if (isConfigModalRequired) {
-    return;
-  }
-
+  isConfigModalRequired = false;
   configModal.hidden = true;
   setConfigModalError('');
 }
@@ -705,20 +702,20 @@ configSaveButton.addEventListener('click', async () => {
   try {
     const result = await window.translatorApi.saveAppConfig(config);
     if (!result?.ok) {
-      setConfigModalError(result?.error || 'Failed to save configuration.');
+      isConfigReady = false;
+      setStatus(`構成保存エラー: ${result?.error || 'Failed to save configuration.'}`, true);
       return;
     }
 
     isConfigReady = true;
-    isConfigModalRequired = false;
-    configModal.hidden = true;
-    setConfigModalError('');
     updateButtons(running);
     setStatus('構成を保存しました。接続確認中です...');
     await refreshHealthStatus();
   } catch (error) {
-    setConfigModalError(error instanceof Error ? error.message : String(error));
+    isConfigReady = false;
+    setStatus(`構成保存エラー: ${error instanceof Error ? error.message : String(error)}`, true);
   } finally {
+    closeConfigModal();
     isSavingConfig = false;
     updateButtons(running);
     renderConfigModalState();
