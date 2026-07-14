@@ -85,10 +85,13 @@
           <textarea id="translatedText" readonly placeholder="Microphone translation appears here..."></textarea>
         </article>
 
-        <article class="panel full-width">
+        <article id="eventLogPanel" class="panel full-width">
           <div class="event-log-header">
             <label for="eventLog">Realtime Event Log</label>
-            <button id="clearEventLogButton" type="button" class="secondary">Clear Event Log</button>
+            <div class="event-log-controls">
+              <button id="toggleEventLogButton" type="button" class="secondary">Hide Event Log</button>
+              <button id="clearEventLogButton" type="button" class="secondary">Clear Event Log</button>
+            </div>
           </div>
           <div id="eventLog" class="event-log" aria-live="polite"></div>
         </article>

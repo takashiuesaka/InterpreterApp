@@ -22,15 +22,16 @@ body {
 }
 
 .app {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 24px;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: clamp(12px, 2vw, 24px);
 }
 
 .header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 16px;
   flex-wrap: wrap;
 }
@@ -47,6 +48,7 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  flex: 0 0 auto;
   min-width: 0;
 }
 
@@ -58,7 +60,7 @@ body {
 }
 
 .header-input-control select {
-  width: auto;
+  width: 220px;
   min-width: 220px;
 }
 
@@ -66,14 +68,18 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  flex: 0 0 auto;
   flex-wrap: wrap;
 }
 
 .header-live-controls {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 12px;
-  flex-wrap: wrap;
+  flex: 1 1 320px;
+  min-width: 260px;
+  width: min(100%, 900px);
+  flex-wrap: nowrap;
 }
 
 .header-controls label {
@@ -83,11 +89,12 @@ body {
 }
 
 .header-controls select {
-  width: auto;
+  width: 150px;
   min-width: 150px;
 }
 
 .audio-icon-button {
+  flex: 0 0 auto;
   width: 40px;
   height: 40px;
   padding: 0;
@@ -166,8 +173,9 @@ body {
 }
 
 .mic-monitor {
-  min-width: 190px;
-  max-width: 260px;
+  flex: 1 1 240px;
+  min-width: 160px;
+  width: 100%;
 }
 
 .mic-monitor-header {
@@ -207,8 +215,16 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 10px;
   margin-bottom: 8px;
+}
+
+.event-log-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .event-log {
@@ -222,6 +238,10 @@ body {
   font-family: 'Consolas', 'Menlo', monospace;
   font-size: 0.83rem;
   line-height: 1.4;
+}
+
+.event-log-collapsed .event-log {
+  display: none;
 }
 
 .event-log-line {
@@ -271,6 +291,11 @@ textarea:focus {
   justify-content: flex-start;
   gap: 8px;
   flex-wrap: wrap;
+  flex: 0 0 auto;
+}
+
+.actions button {
+  flex: 0 0 auto;
 }
 
 .toggle {
@@ -313,47 +338,39 @@ button:disabled {
 @media (max-width: 900px) {
   .header {
     align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .header-main {
     width: 100%;
   }
 
   .header-live-controls {
     width: 100%;
+    flex-wrap: wrap;
   }
 
   .actions {
-    width: 100%;
-  }
-
-  .actions button {
-    flex: 1 1 140px;
+    flex-wrap: wrap;
   }
 
   .mic-monitor {
-    flex: 1 1 220px;
+    flex: 1 1 100%;
     width: 100%;
-    max-width: none;
   }
 
   .header-input-control {
-    width: 100%;
+    flex: 0 0 auto;
   }
 
   .header-input-control select {
-    width: 100%;
-    min-width: 0;
+    width: 220px;
+    min-width: 220px;
   }
 
   .header-controls {
-    width: 100%;
+    flex: 0 0 auto;
     justify-content: flex-start;
   }
 
   .header-controls select {
-    width: 100%;
+    width: 150px;
   }
 
   .panel-grid {
