@@ -1,4 +1,5 @@
 const translatedText = document.getElementById('translatedText');
+const inputDevice = document.getElementById('inputDevice');
 const targetLanguage = document.getElementById('targetLanguage');
 const audioMuteToggleButton = document.getElementById('audioMuteToggleButton');
 const startButton = document.getElementById('startButton');
@@ -25,10 +26,14 @@ let muteGainNode = null;
 let running = false;
 let playbackCursorTime = 0;
 let isTranslatedAudioMuted = false;
+let selectedInputDeviceId = 'default';
+let isSwitchingInputDevice = false;
+let deviceChangeListener = null;
 
 const TARGET_SAMPLE_RATE = 24000;
 const OUTPUT_SAMPLE_RATE = 24000;
 const MAX_EVENT_LOG_LINES = 200;
+const RUNNING_STATUS_MESSAGE = 'WebSocket Realtime翻訳中... マイク入力を日本語へ変換しています。';
 
 function formatTimestamp(epochMillis) {
   const date = new Date(epochMillis);
@@ -202,12 +207,151 @@ function updateButtons(isRunning) {
   stopButton.disabled = !isRunning;
 }
 
-async function stopRealtimeTranslation() {
-  running = false;
-  updateButtons(false);
-  updateMicLevel(0);
-  playbackCursorTime = 0;
+function updateInputDeviceDisabledState() {
+  inputDevice.disabled = isSwitchingInputDevice;
+}
 
+function buildAudioConstraints(deviceId) {
+  const audioConstraints = {
+    channelCount: 1,
+    echoCancellation: true,
+    noiseSuppression: true,
+  };
+
+  if (deviceId && deviceId !== 'default') {
+    audioConstraints.deviceId = { exact: deviceId };
+  }
+
+  return audioConstraints;
+}
+
+async function requestAudioStreamWithFallback(preferredDeviceId) {
+  const requestedDeviceId = preferredDeviceId || 'default';
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: buildAudioConstraints(requestedDeviceId),
+      video: false,
+    });
+    return { stream, activeDeviceId: requestedDeviceId };
+  } catch (error) {
+    if (requestedDeviceId !== 'default') {
+      pushEventLogLine(
+        `[${formatTimestamp(Date.now())}] client: selected input unavailable, fallback to default`,
+        false,
+      );
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: buildAudioConstraints('default'),
+        video: false,
+      });
+      return { stream, activeDeviceId: 'default' };
+    }
+
+    throw error;
+  }
+}
+
+function getDisplayNameForDevice(device, index) {
+  if (device.label) {
+    return device.label;
+  }
+
+  return `Microphone ${index + 1}`;
+}
+
+async function loadInputDevices(options = {}) {
+  const { announce = false } = options;
+  const previousSelection = selectedInputDeviceId || 'default';
+
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  const audioInputs = devices.filter((device) => device.kind === 'audioinput');
+
+  inputDevice.textContent = '';
+
+  const defaultOption = document.createElement('option');
+  defaultOption.value = 'default';
+  defaultOption.textContent = 'System Default Microphone';
+  inputDevice.appendChild(defaultOption);
+
+  audioInputs.forEach((device, index) => {
+    const option = document.createElement('option');
+    option.value = device.deviceId;
+    option.textContent = getDisplayNameForDevice(device, index);
+    inputDevice.appendChild(option);
+  });
+
+  const availableIds = new Set(['default', ...audioInputs.map((device) => device.deviceId)]);
+  const resolvedSelection = availableIds.has(previousSelection) ? previousSelection : 'default';
+  const selectionChanged = resolvedSelection !== previousSelection;
+
+  selectedInputDeviceId = resolvedSelection;
+  inputDevice.value = resolvedSelection;
+
+  if (announce) {
+    pushEventLogLine(
+      `[${formatTimestamp(Date.now())}] client: input devices refreshed (${audioInputs.length})`,
+      false,
+    );
+  }
+
+  return { selectionChanged, previousSelection, resolvedSelection };
+}
+
+async function setupAudioInputPipeline(preferredDeviceId) {
+  const { stream, activeDeviceId } = await requestAudioStreamWithFallback(preferredDeviceId);
+  mediaStream = stream;
+
+  audioContext = new AudioContext();
+  await audioContext.resume();
+
+  sourceNode = audioContext.createMediaStreamSource(mediaStream);
+  processorNode = audioContext.createScriptProcessor(4096, 1, 1);
+  muteGainNode = audioContext.createGain();
+  muteGainNode.gain.value = 0;
+
+  processorNode.onaudioprocess = (event) => {
+    if (!running) {
+      return;
+    }
+
+    const inputSamples = event.inputBuffer.getChannelData(0);
+    const level = calculateRmsLevel(inputSamples);
+    updateMicLevel(level);
+
+    const downsampled = downsampleFloat32(inputSamples, audioContext.sampleRate, TARGET_SAMPLE_RATE);
+    const int16 = convertFloat32ToInt16(downsampled);
+    const audioBase64 = int16ToBase64(int16);
+    window.translatorApi.appendAudioChunk(audioBase64);
+  };
+
+  sourceNode.connect(processorNode);
+  processorNode.connect(muteGainNode);
+  muteGainNode.connect(audioContext.destination);
+  playbackCursorTime = audioContext.currentTime;
+
+  mediaStream.getAudioTracks().forEach((track) => {
+    track.addEventListener('ended', async () => {
+      if (!running || isSwitchingInputDevice) {
+        return;
+      }
+
+      pushEventLogLine(
+        `[${formatTimestamp(Date.now())}] client: active input ended, fallback to default`,
+        true,
+      );
+
+      try {
+        await switchActiveInputDevice('default', true);
+      } catch {
+        // switchActiveInputDevice handles status and stop on failure.
+      }
+    });
+  });
+
+  return { activeDeviceId };
+}
+
+async function teardownAudioPipeline() {
   if (processorNode) {
     try {
       processorNode.disconnect();
@@ -249,6 +393,57 @@ async function stopRealtimeTranslation() {
     }
     audioContext = null;
   }
+}
+
+async function switchActiveInputDevice(nextDeviceId, triggeredByFallback) {
+  if (!running || isSwitchingInputDevice) {
+    return;
+  }
+
+  isSwitchingInputDevice = true;
+  updateInputDeviceDisabledState();
+  setStatus('入力デバイスを切り替えています...');
+
+  try {
+    await teardownAudioPipeline();
+    const { activeDeviceId } = await setupAudioInputPipeline(nextDeviceId);
+
+    selectedInputDeviceId = activeDeviceId;
+    inputDevice.value = activeDeviceId;
+
+    if (triggeredByFallback || activeDeviceId !== nextDeviceId) {
+      pushEventLogLine(
+        `[${formatTimestamp(Date.now())}] client: input switched to default`,
+        false,
+      );
+    } else {
+      pushEventLogLine(
+        `[${formatTimestamp(Date.now())}] client: input switched`,
+        false,
+      );
+    }
+
+    setStatus(RUNNING_STATUS_MESSAGE);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    setStatus(`入力デバイス切替エラー: ${message}`, true);
+    pushEventLogLine(`[${formatTimestamp(Date.now())}] client error: ${message}`, true);
+    await stopRealtimeTranslation();
+  } finally {
+    isSwitchingInputDevice = false;
+    updateInputDeviceDisabledState();
+  }
+}
+
+async function stopRealtimeTranslation() {
+  running = false;
+  updateButtons(false);
+  isSwitchingInputDevice = false;
+  updateInputDeviceDisabledState();
+  updateMicLevel(0);
+  playbackCursorTime = 0;
+
+  await teardownAudioPipeline();
 
   try {
     await window.translatorApi.stopRealtimeAudioTranslation();
@@ -274,54 +469,21 @@ async function startRealtimeTranslation() {
   setStatus('Realtime翻訳セッションを開始しています...');
 
   try {
-    mediaStream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        channelCount: 1,
-        echoCancellation: true,
-        noiseSuppression: true,
-      },
-      video: false,
-    });
-
-    audioContext = new AudioContext();
-    await audioContext.resume();
+    const { activeDeviceId } = await setupAudioInputPipeline(selectedInputDeviceId);
+    selectedInputDeviceId = activeDeviceId;
+    inputDevice.value = activeDeviceId;
 
     await window.translatorApi.startRealtimeAudioTranslation(targetLanguage.value);
 
-    sourceNode = audioContext.createMediaStreamSource(mediaStream);
-    processorNode = audioContext.createScriptProcessor(4096, 1, 1);
-    muteGainNode = audioContext.createGain();
-    muteGainNode.gain.value = 0;
-
     running = true;
-    playbackCursorTime = audioContext.currentTime;
-
-    processorNode.onaudioprocess = (event) => {
-      if (!running) {
-        return;
-      }
-
-      const inputSamples = event.inputBuffer.getChannelData(0);
-      const level = calculateRmsLevel(inputSamples);
-      updateMicLevel(level);
-
-      const downsampled = downsampleFloat32(
-        inputSamples,
-        audioContext.sampleRate,
-        TARGET_SAMPLE_RATE,
-      );
-      const int16 = convertFloat32ToInt16(downsampled);
-      const audioBase64 = int16ToBase64(int16);
-      window.translatorApi.appendAudioChunk(audioBase64);
-    };
-
-    sourceNode.connect(processorNode);
-    processorNode.connect(muteGainNode);
-    muteGainNode.connect(audioContext.destination);
 
     updateButtons(true);
+    updateInputDeviceDisabledState();
 
-    setStatus('WebSocket Realtime翻訳中... マイク入力を日本語へ変換しています。');
+    await loadInputDevices();
+    inputDevice.value = selectedInputDeviceId;
+
+    setStatus(RUNNING_STATUS_MESSAGE);
     pushEventLogLine(`[${formatTimestamp(Date.now())}] client: audio stream active`, false);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -343,6 +505,20 @@ clearButton.addEventListener('click', () => {
   translatedText.value = '';
 });
 
+inputDevice.addEventListener('change', async () => {
+  const nextDeviceId = inputDevice.value || 'default';
+  selectedInputDeviceId = nextDeviceId;
+
+  pushEventLogLine(
+    `[${formatTimestamp(Date.now())}] client: input device selected (${nextDeviceId})`,
+    false,
+  );
+
+  if (running) {
+    await switchActiveInputDevice(nextDeviceId, false);
+  }
+});
+
 audioMuteToggleButton.addEventListener('click', () => {
   isTranslatedAudioMuted = !isTranslatedAudioMuted;
   renderAudioMuteToggle();
@@ -360,6 +536,37 @@ clearEventLogButton.addEventListener('click', () => {
 async function initialize() {
   updateButtons(false);
   updateMicLevel(0);
+  updateInputDeviceDisabledState();
+
+  try {
+    await loadInputDevices();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    pushEventLogLine(
+      `[${formatTimestamp(Date.now())}] init warning: input device list unavailable (${message})`,
+      true,
+    );
+  }
+
+  if (navigator.mediaDevices && typeof navigator.mediaDevices.addEventListener === 'function') {
+    deviceChangeListener = async () => {
+      try {
+        const { selectionChanged } = await loadInputDevices({ announce: true });
+
+        if (selectionChanged && running) {
+          await switchActiveInputDevice(selectedInputDeviceId, true);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        pushEventLogLine(
+          `[${formatTimestamp(Date.now())}] devicechange warning: ${message}`,
+          true,
+        );
+      }
+    };
+
+    navigator.mediaDevices.addEventListener('devicechange', deviceChangeListener);
+  }
 
   unsubscribeDeltaListener = window.translatorApi.onTranslationDelta((payload) => {
     const delta = payload?.delta;
@@ -466,5 +673,10 @@ window.addEventListener('beforeunload', () => {
 
   if (typeof unsubscribeAudioDeltaListener === 'function') {
     unsubscribeAudioDeltaListener();
+  }
+
+  if (deviceChangeListener && navigator.mediaDevices) {
+    navigator.mediaDevices.removeEventListener('devicechange', deviceChangeListener);
+    deviceChangeListener = null;
   }
 });
