@@ -39,6 +39,7 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
   min-width: 0;
 }
 
@@ -65,6 +66,13 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.header-live-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
@@ -158,17 +166,24 @@ body {
 }
 
 .mic-monitor {
-  margin-top: 12px;
-  margin-bottom: 8px;
+  min-width: 190px;
+  max-width: 260px;
 }
 
 .mic-monitor-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
+  gap: 8px;
   font-size: 0.92rem;
   color: var(--text-subtle);
   margin-bottom: 6px;
+}
+
+.mic-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--primary-strong);
 }
 
 .mic-level-track {
@@ -251,7 +266,6 @@ textarea:focus {
 }
 
 .actions {
-  margin-top: 10px;
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -302,6 +316,28 @@ button:disabled {
     flex-direction: column;
   }
 
+  .header-main {
+    width: 100%;
+  }
+
+  .header-live-controls {
+    width: 100%;
+  }
+
+  .actions {
+    width: 100%;
+  }
+
+  .actions button {
+    flex: 1 1 140px;
+  }
+
+  .mic-monitor {
+    flex: 1 1 220px;
+    width: 100%;
+    max-width: none;
+  }
+
   .header-input-control {
     width: 100%;
   }
@@ -313,6 +349,7 @@ button:disabled {
 
   .header-controls {
     width: 100%;
+    justify-content: flex-start;
   }
 
   .header-controls select {
