@@ -126,10 +126,15 @@ function setStatus(message, isError) {
 }
 
 function renderAudioMuteToggle() {
-  audioMuteToggleButton.textContent = isTranslatedAudioMuted
+  audioMuteToggleButton.classList.toggle('muted', isTranslatedAudioMuted);
+  audioMuteToggleButton.setAttribute('aria-pressed', isTranslatedAudioMuted ? 'true' : 'false');
+  audioMuteToggleButton.setAttribute(
+    'aria-label',
+    isTranslatedAudioMuted ? '翻訳音声をミュート解除' : '翻訳音声をミュート',
+  );
+  audioMuteToggleButton.title = isTranslatedAudioMuted
     ? '翻訳音声: ミュート中'
     : '翻訳音声: 再生中';
-  audioMuteToggleButton.setAttribute('aria-pressed', isTranslatedAudioMuted ? 'true' : 'false');
 }
 
 function appendTranslationDelta(delta) {
