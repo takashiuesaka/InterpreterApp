@@ -2,6 +2,7 @@ const translatedText = document.getElementById('translatedText');
 const inputDevice = document.getElementById('inputDevice');
 const targetLanguage = document.getElementById('targetLanguage');
 const audioMuteToggleButton = document.getElementById('audioMuteToggleButton');
+const settingsButton = document.getElementById('settingsButton');
 const startButton = document.getElementById('startButton');
 const stopButton = document.getElementById('stopButton');
 const saveButton = document.getElementById('saveButton');
@@ -13,6 +14,13 @@ const micLevelBar = document.getElementById('micLevelBar');
 const micLevelValue = document.getElementById('micLevelValue');
 const eventLog = document.getElementById('eventLog');
 const eventLogPanel = document.getElementById('eventLogPanel');
+const configModal = document.getElementById('configModal');
+const configEndpointInput = document.getElementById('configEndpointInput');
+const configDeploymentInput = document.getElementById('configDeploymentInput');
+const configTenantInput = document.getElementById('configTenantInput');
+const configModalError = document.getElementById('configModalError');
+const configSaveButton = document.getElementById('configSaveButton');
+const configCancelButton = document.getElementById('configCancelButton');
 
 let unsubscribeDeltaListener = null;
 let unsubscribeDoneListener = null;
@@ -34,6 +42,9 @@ let isSwitchingInputDevice = false;
 let deviceChangeListener = null;
 let isEventLogVisible = true;
 let persistOutputTimer = null;
+let isConfigReady = false;
+let isConfigModalRequired = false;
+let isSavingConfig = false;
 
 const TARGET_SAMPLE_RATE = 24000;
 const OUTPUT_SAMPLE_RATE = 24000;
@@ -65,6 +76,94 @@ function pushEventLogLine(text, isError) {
 
 function clearEventLog() {
   eventLog.textContent = '';
+}
+
+function renderConfigModalState() {
+  configSaveButton.disabled = isSavingConfig;
+  configCancelButton.disabled = isSavingConfig || isConfigModalRequired;
+}
+
+function setConfigModalError(message) {
+  if (!message) {
+    configModalError.hidden = true;
+    configModalError.textContent = '';
+    return;
+  }
+
+  configModalError.hidden = false;
+  configModalError.textContent = message;
+}
+
+function openConfigModal(required) {
+  isConfigModalRequired = required;
+  configModal.hidden = false;
+  setConfigModalError('');
+  renderConfigModalState();
+}
+
+function closeConfigModal() {
+  if (isConfigModalRequired) {
+    return;
+  }
+
+  configModal.hidden = true;
+  setConfigModalError('');
+}
+
+function fillConfigInputs(config) {
+  configEndpointInput.value = config?.FOUNDRY_ENDPOINT || '';
+  configDeploymentInput.value = config?.FOUNDRY_DEPLOYMENT || '';
+  configTenantInput.value = config?.AZURE_TENANT_ID || '';
+}
+
+function readConfigFromInputs() {
+  return {
+    FOUNDRY_ENDPOINT: configEndpointInput.value.trim(),
+    FOUNDRY_DEPLOYMENT: configDeploymentInput.value.trim(),
+    AZURE_TENANT_ID: configTenantInput.value.trim(),
+  };
+}
+
+async function loadConfigState() {
+  try {
+    const result = await window.translatorApi.getAppConfig();
+    if (!result?.ok) {
+      isConfigReady = false;
+      updateButtons(running);
+      return { valid: false, reason: result?.error || 'Failed to load configuration.' };
+    }
+
+    fillConfigInputs(result.config || {});
+    isConfigReady = Boolean(result.valid);
+    updateButtons(running);
+
+    return result;
+  } catch (error) {
+    isConfigReady = false;
+    updateButtons(running);
+    return {
+      valid: false,
+      reason: error instanceof Error ? error.message : String(error),
+      config: readConfigFromInputs(),
+    };
+  }
+}
+
+async function refreshHealthStatus() {
+  try {
+    const health = await window.translatorApi.healthCheck();
+    if (health.ready) {
+      if (!running) {
+        setStatus('準備完了。Start でWebSocket Realtime翻訳を開始してください。');
+      }
+      return;
+    }
+
+    setStatus(`構成または認証エラー: ${health.reason}`, true);
+  } catch (error) {
+    setStatus(`初期化エラー: ${String(error)}`, true);
+    pushEventLogLine(`[${formatTimestamp(Date.now())}] init error: ${String(error)}`, true);
+  }
 }
 
 function renderEventLogVisibility() {
@@ -256,7 +355,7 @@ function int16ToBase64(int16Samples) {
 }
 
 function updateButtons(isRunning) {
-  startButton.disabled = isRunning;
+  startButton.disabled = isRunning || !isConfigReady || isSavingConfig;
   stopButton.disabled = !isRunning;
 }
 
@@ -518,6 +617,12 @@ async function startRealtimeTranslation() {
     return;
   }
 
+  if (!isConfigReady) {
+    setStatus('構成設定が未完了です。設定を保存してください。', true);
+    openConfigModal(true);
+    return;
+  }
+
   clearEventLog();
   pushEventLogLine(`[${formatTimestamp(Date.now())}] client: start requested`, false);
   setStatus('Realtime翻訳セッションを開始しています...');
@@ -581,6 +686,45 @@ saveButton.addEventListener('click', async () => {
   setStatus(`保存エラー: ${result?.error || 'Unknown error'}`, true);
 });
 
+settingsButton.addEventListener('click', async () => {
+  const state = await loadConfigState();
+  openConfigModal(!state.valid);
+});
+
+configCancelButton.addEventListener('click', () => {
+  closeConfigModal();
+});
+
+configSaveButton.addEventListener('click', async () => {
+  const config = readConfigFromInputs();
+
+  isSavingConfig = true;
+  updateButtons(running);
+  renderConfigModalState();
+
+  try {
+    const result = await window.translatorApi.saveAppConfig(config);
+    if (!result?.ok) {
+      setConfigModalError(result?.error || 'Failed to save configuration.');
+      return;
+    }
+
+    isConfigReady = true;
+    isConfigModalRequired = false;
+    configModal.hidden = true;
+    setConfigModalError('');
+    updateButtons(running);
+    setStatus('構成を保存しました。接続確認中です...');
+    await refreshHealthStatus();
+  } catch (error) {
+    setConfigModalError(error instanceof Error ? error.message : String(error));
+  } finally {
+    isSavingConfig = false;
+    updateButtons(running);
+    renderConfigModalState();
+  }
+});
+
 inputDevice.addEventListener('change', async () => {
   const nextDeviceId = inputDevice.value || 'default';
   selectedInputDeviceId = nextDeviceId;
@@ -618,6 +762,7 @@ async function initialize() {
   updateButtons(false);
   updateMicLevel(0);
   updateInputDeviceDisabledState();
+  renderConfigModalState();
 
   try {
     const persisted = await window.translatorApi.loadPersistedTranslation();
@@ -719,19 +864,18 @@ async function initialize() {
   });
 
   try {
-    const health = await window.translatorApi.healthCheck();
-    if (health.ready) {
-      setStatus('準備完了。Start でWebSocket Realtime翻訳を開始してください。');
+    const configState = await loadConfigState();
+    if (!configState.valid) {
+      const reason = configState.reason || 'Foundry 構成が未設定です。';
+      setStatus(`構成設定が必要です: ${reason}`, true);
+      openConfigModal(true);
       return;
     }
 
-    setStatus(
-      `Foundry設定が不足しています: ${health.reason}\nFOUNDRY_ENDPOINT / FOUNDRY_DEPLOYMENT を設定してください。`,
-      true,
-    );
-  } catch (error) {
-    setStatus(`初期化エラー: ${String(error)}`, true);
-    pushEventLogLine(`[${formatTimestamp(Date.now())}] init error: ${String(error)}`, true);
+    await refreshHealthStatus();
+  } catch {
+    setStatus('構成の初期化に失敗しました。', true);
+    openConfigModal(true);
   }
 }
 

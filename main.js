@@ -4,32 +4,119 @@ const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const { InteractiveBrowserCredential } = require('@azure/identity');
 const WebSocket = require('ws');
 
-try {
-  require('dotenv').config();
-} catch {
-  // dotenv is optional at runtime; environment variables can be supplied by shell.
-}
-
 const FOUNDRY_SCOPE = 'https://cognitiveservices.azure.com/.default';
 const PERSISTED_TRANSLATION_FILENAME = 'translation-output.txt';
+const APP_CONFIG_FILENAME = 'app-config.json';
+const REQUIRED_CONFIG_KEYS = ['FOUNDRY_ENDPOINT', 'FOUNDRY_DEPLOYMENT', 'AZURE_TENANT_ID'];
+const DEFAULT_REALTIME_MODE = 'auto';
+const DEFAULT_REALTIME_API_VERSION = '2025-04-01-preview';
 const realtimeSessions = new Map();
 
 let cachedToken = null;
 let startupAuthError = null;
+let credential = null;
+let credentialTenantId = '';
 
-function createInteractiveCredential() {
-  const tenantId = process.env.AZURE_TENANT_ID;
+function createInteractiveCredential(tenantId) {
   return new InteractiveBrowserCredential({ tenantId });
 }
 
-const credential = createInteractiveCredential();
+function getAppConfigPath() {
+  return path.join(app.getPath('userData'), APP_CONFIG_FILENAME);
+}
 
-async function getAccessToken(forceRefresh = false) {
+function sanitizeAppConfig(input) {
+  return {
+    FOUNDRY_ENDPOINT: typeof input?.FOUNDRY_ENDPOINT === 'string' ? input.FOUNDRY_ENDPOINT.trim() : '',
+    FOUNDRY_DEPLOYMENT:
+      typeof input?.FOUNDRY_DEPLOYMENT === 'string' ? input.FOUNDRY_DEPLOYMENT.trim() : '',
+    AZURE_TENANT_ID: typeof input?.AZURE_TENANT_ID === 'string' ? input.AZURE_TENANT_ID.trim() : '',
+  };
+}
+
+function getMissingConfigKeys(config) {
+  return REQUIRED_CONFIG_KEYS.filter((key) => !config[key]);
+}
+
+async function readAppConfigState() {
+  const configPath = getAppConfigPath();
+
+  try {
+    const raw = await fs.readFile(configPath, 'utf8');
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return {
+        exists: true,
+        valid: false,
+        config: sanitizeAppConfig({}),
+        missingKeys: [...REQUIRED_CONFIG_KEYS],
+        reason: 'Configuration file is not valid JSON.',
+      };
+    }
+
+    const config = sanitizeAppConfig(parsed);
+    const missingKeys = getMissingConfigKeys(config);
+
+    return {
+      exists: true,
+      valid: missingKeys.length === 0,
+      config,
+      missingKeys,
+      reason:
+        missingKeys.length === 0
+          ? ''
+          : `Missing required configuration keys: ${missingKeys.join(', ')}`,
+    };
+  } catch (error) {
+    if (error && typeof error === 'object' && error.code === 'ENOENT') {
+      return {
+        exists: false,
+        valid: false,
+        config: sanitizeAppConfig({}),
+        missingKeys: [...REQUIRED_CONFIG_KEYS],
+        reason: 'Configuration file was not found.',
+      };
+    }
+
+    return {
+      exists: false,
+      valid: false,
+      config: sanitizeAppConfig({}),
+      missingKeys: [...REQUIRED_CONFIG_KEYS],
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+async function getValidatedAppConfig() {
+  const state = await readAppConfigState();
+  if (!state.valid) {
+    throw new Error(state.reason || 'Configuration is incomplete.');
+  }
+
+  return state.config;
+}
+
+function getCredentialForTenant(tenantId) {
+  if (!credential || credentialTenantId !== tenantId) {
+    credential = createInteractiveCredential(tenantId);
+    credentialTenantId = tenantId;
+    cachedToken = null;
+  }
+
+  return credential;
+}
+
+async function getAccessToken(tenantId, forceRefresh = false) {
   if (!forceRefresh && cachedToken && cachedToken.expiresOnTimestamp - Date.now() > 60_000) {
     return cachedToken.token;
   }
 
-  const token = await credential.getToken(FOUNDRY_SCOPE);
+  const tenantCredential = getCredentialForTenant(tenantId);
+
+  const token = await tenantCredential.getToken(FOUNDRY_SCOPE);
   if (!token || !token.token) {
     throw new Error('Failed to acquire Entra ID access token.');
   }
@@ -40,28 +127,32 @@ async function getAccessToken(forceRefresh = false) {
 
 async function authenticateAtStartup() {
   try {
-    await getAccessToken(true);
+    const config = await getValidatedAppConfig();
+    await getAccessToken(config.AZURE_TENANT_ID, true);
     startupAuthError = null;
   } catch (error) {
     startupAuthError = error;
   }
 }
 
-function getFoundryConfig() {
-  const endpoint = process.env.FOUNDRY_ENDPOINT;
-  const deployment = process.env.FOUNDRY_DEPLOYMENT;
-  const realtimeMode = (process.env.FOUNDRY_REALTIME_MODE || 'auto').toLowerCase();
-  const realtimeApiVersion = process.env.FOUNDRY_REALTIME_API_VERSION || '2025-04-01-preview';
+async function getFoundryConfig() {
+  const config = await getValidatedAppConfig();
+  const endpoint = config.FOUNDRY_ENDPOINT;
+  const deployment = config.FOUNDRY_DEPLOYMENT;
+  const azureTenantId = config.AZURE_TENANT_ID;
+  const realtimeMode = DEFAULT_REALTIME_MODE;
+  const realtimeApiVersion = DEFAULT_REALTIME_API_VERSION;
 
-  if (!endpoint || !deployment) {
+  if (!endpoint || !deployment || !azureTenantId) {
     throw new Error(
-      'Missing Foundry configuration. Set FOUNDRY_ENDPOINT and FOUNDRY_DEPLOYMENT.',
+      'Missing Foundry configuration. Set FOUNDRY_ENDPOINT, FOUNDRY_DEPLOYMENT and AZURE_TENANT_ID.',
     );
   }
 
   return {
     endpoint: endpoint.replace(/\/$/, ''),
     deployment,
+    azureTenantId,
     realtimeMode,
     realtimeApiVersion,
   };
@@ -286,8 +377,8 @@ async function startRealtimeSession(webContents, targetLanguage) {
   const webContentsId = webContents.id;
   closeRealtimeSession(webContentsId);
 
-  const config = getFoundryConfig();
-  const accessToken = await getAccessToken();
+  const config = await getFoundryConfig();
+  const accessToken = await getAccessToken(config.azureTenantId);
   const candidates = buildRealtimeUrlCandidates(config);
   const { ws, mode, label, url, appendEventType } = await connectWithFallback(candidates, accessToken);
 
@@ -472,18 +563,52 @@ ipcMain.handle('translate:realtime-audio-stop', async (event) => {
 
 ipcMain.handle('translate:health', async () => {
   try {
-    getFoundryConfig();
+    const config = await getFoundryConfig();
 
     if (startupAuthError) {
-      await getAccessToken(true);
+      await getAccessToken(config.azureTenantId, true);
       startupAuthError = null;
     } else {
-      await getAccessToken();
+      await getAccessToken(config.azureTenantId);
     }
 
     return { ready: true };
   } catch (error) {
     return { ready: false, reason: error.message };
+  }
+});
+
+ipcMain.handle('app:config:get', async () => {
+  const state = await readAppConfigState();
+  return {
+    ok: true,
+    ...state,
+  };
+});
+
+ipcMain.handle('app:config:save', async (_event, payload) => {
+  const config = sanitizeAppConfig(payload?.config);
+  const missingKeys = getMissingConfigKeys(config);
+
+  if (missingKeys.length > 0) {
+    return {
+      ok: false,
+      error: `Missing required configuration keys: ${missingKeys.join(', ')}`,
+      missingKeys,
+    };
+  }
+
+  try {
+    const configPath = getAppConfigPath();
+    await fs.mkdir(path.dirname(configPath), { recursive: true });
+    await fs.writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+    startupAuthError = null;
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
 });
 

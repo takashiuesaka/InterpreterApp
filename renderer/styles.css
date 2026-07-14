@@ -121,6 +121,11 @@ body {
   height: 28px;
 }
 
+.settings-icon {
+  width: 22px;
+  height: 22px;
+}
+
 .audio-icon-button .icon-muted {
   display: none;
 }
@@ -146,6 +151,58 @@ body {
   background: #fef3f2;
   border-color: #fecdca;
   color: var(--error);
+}
+
+.config-modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(12, 20, 37, 0.45);
+  z-index: 1000;
+  padding: 16px;
+}
+
+.config-modal-card {
+  width: min(560px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px;
+  display: grid;
+  gap: 10px;
+}
+
+.config-modal-card h2 {
+  margin: 0;
+}
+
+.config-modal-description {
+  margin: 0;
+  color: var(--text-subtle);
+  font-size: 0.94rem;
+}
+
+.config-modal-card input {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  font-size: 1rem;
+}
+
+.config-modal-error {
+  margin: 0;
+  color: var(--error);
+  font-size: 0.9rem;
+}
+
+.config-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
 }
 
 .panel-grid {
