@@ -403,7 +403,6 @@ async function startRealtimeSession(webContents, targetLanguage) {
             input: {
               transcription: {
                 model: 'gpt-realtime-whisper',
-                language: 'en',
               },
             },
             output: {
