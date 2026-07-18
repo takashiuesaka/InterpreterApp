@@ -325,6 +325,38 @@ function extractTextFromResponseDone(event) {
     .trim();
 }
 
+function extractInputSttText(event) {
+  if (typeof event?.transcript === 'string' && event.transcript) {
+    return event.transcript;
+  }
+
+  if (typeof event?.text === 'string' && event.text) {
+    return event.text;
+  }
+
+  if (typeof event?.delta === 'string' && event.delta) {
+    return event.delta;
+  }
+
+  const parts = event?.item?.content;
+  if (!Array.isArray(parts)) {
+    return '';
+  }
+
+  return parts
+    .map((part) => {
+      if (typeof part?.transcript === 'string') {
+        return part.transcript;
+      }
+      if (typeof part?.text === 'string') {
+        return part.text;
+      }
+      return '';
+    })
+    .join('')
+    .trim();
+}
+
 function summarizeRealtimeEvent(event) {
   const eventType = event?.type || 'unknown';
 
@@ -338,7 +370,8 @@ function summarizeRealtimeEvent(event) {
     eventType === 'response.audio_transcript.delta' ||
     eventType === 'session.output_text.delta' ||
     eventType === 'session.output_transcript.delta' ||
-    eventType === 'session.output_audio_transcript.delta'
+    eventType === 'session.output_audio_transcript.delta' ||
+    eventType === 'session.input_transcript.delta'
   ) {
     const delta =
       typeof event?.delta === 'string'
@@ -355,7 +388,8 @@ function summarizeRealtimeEvent(event) {
     eventType === 'response.done' ||
     eventType === 'session.output_text.done' ||
     eventType === 'session.output_transcript.done' ||
-    eventType === 'session.output_audio_transcript.done'
+    eventType === 'session.output_audio_transcript.done' ||
+    eventType === 'session.input_transcript.done'
   ) {
     const doneText =
       typeof event?.text === 'string' ? event.text : extractTextFromResponseDone(event);
@@ -364,6 +398,13 @@ function summarizeRealtimeEvent(event) {
 
   if (eventType === 'session.updated') {
     return 'session updated';
+  }
+
+  if (
+    eventType === 'conversation.item.input_audio_transcription.failed' ||
+    eventType === 'conversation.item.audio_transcription.failed'
+  ) {
+    return event?.error?.message || 'input transcription failed';
   }
 
   return 'event received';
@@ -494,10 +535,12 @@ async function startRealtimeSession(webContents, targetLanguage) {
       }
 
       const isInputSttDeltaEvent =
-        event?.type === 'conversation.item.input_audio_transcription.delta';
+        event?.type === 'conversation.item.input_audio_transcription.delta' ||
+        event?.type === 'conversation.item.audio_transcription.delta' ||
+        event?.type === 'session.input_transcript.delta';
 
       if (isInputSttDeltaEvent) {
-        const delta = typeof event?.delta === 'string' ? event.delta : '';
+        const delta = extractInputSttText(event);
         if (delta) {
           webContents.send('translate:input-stt-delta', { delta });
         }
@@ -505,11 +548,23 @@ async function startRealtimeSession(webContents, targetLanguage) {
       }
 
       const isInputSttDoneEvent =
-        event?.type === 'conversation.item.input_audio_transcription.completed';
+        event?.type === 'conversation.item.input_audio_transcription.completed' ||
+        event?.type === 'conversation.item.audio_transcription.completed' ||
+        event?.type === 'session.input_transcript.done';
 
       if (isInputSttDoneEvent) {
-        const transcript = typeof event?.transcript === 'string' ? event.transcript : '';
+        const transcript = extractInputSttText(event);
         webContents.send('translate:input-stt-done', { text: transcript });
+        return;
+      }
+
+      const isInputSttFailedEvent =
+        event?.type === 'conversation.item.input_audio_transcription.failed' ||
+        event?.type === 'conversation.item.audio_transcription.failed';
+
+      if (isInputSttFailedEvent) {
+        const message = event?.error?.message || 'Input transcription failed.';
+        webContents.send('translate:error', { message });
         return;
       }
 

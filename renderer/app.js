@@ -48,6 +48,7 @@ let persistOutputTimer = null;
 let isConfigReady = false;
 let isConfigModalRequired = false;
 let isSavingConfig = false;
+let hasInputSttDeltaSinceLastDone = false;
 
 const TARGET_SAMPLE_RATE = 24000;
 const OUTPUT_SAMPLE_RATE = 24000;
@@ -638,6 +639,7 @@ async function startRealtimeTranslation() {
   if (inputSttText) {
     inputSttText.value = '';
   }
+  hasInputSttDeltaSinceLastDone = false;
   pushEventLogLine(`[${formatTimestamp(Date.now())}] client: start requested`, false);
   setStatus('Realtime翻訳セッションを開始しています...');
 
@@ -679,6 +681,7 @@ clearButton.addEventListener('click', () => {
   if (inputSttText) {
     inputSttText.value = '';
   }
+  hasInputSttDeltaSinceLastDone = false;
   flushPersistedOutputSave();
 });
 
@@ -887,6 +890,7 @@ async function initialize() {
     }
 
     appendInputSttDelta(delta);
+    hasInputSttDeltaSinceLastDone = true;
     pushEventLogLine(
       `[${formatTimestamp(Date.now())}] ui: input-stt:delta (${delta.length}) ${delta.slice(0, 80)}`,
       false,
@@ -894,8 +898,12 @@ async function initialize() {
   });
 
   unsubscribeInputSttDoneListener = window.translatorApi.onInputSttDone((payload) => {
-    appendInputSttDelta('\n');
     const text = typeof payload?.text === 'string' ? payload.text : '';
+    if (!hasInputSttDeltaSinceLastDone && text) {
+      appendInputSttDelta(text);
+    }
+    appendInputSttDelta('\n');
+    hasInputSttDeltaSinceLastDone = false;
     pushEventLogLine(
       `[${formatTimestamp(Date.now())}] ui: input-stt:done (${text.length}) ${text.slice(0, 80)}`,
       false,
