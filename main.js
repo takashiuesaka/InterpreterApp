@@ -402,7 +402,8 @@ async function startRealtimeSession(webContents, targetLanguage) {
           audio: {
             input: {
               transcription: {
-                model: config.deployment,
+                model: 'gpt-realtime-whisper',
+                language: 'en',
               },
             },
             output: {
