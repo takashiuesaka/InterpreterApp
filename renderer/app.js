@@ -1,5 +1,13 @@
 const translatedText = document.getElementById('translatedText');
 const inputSttText = document.getElementById('inputSttText');
+const panelGrid = document.querySelector('.panel-grid');
+const translationPanel = document.getElementById('translationPanel');
+const inputSttPanel = document.getElementById('inputSttPanel');
+const panelRestoreBar = document.getElementById('panelRestoreBar');
+const showTranslationPanelButton = document.getElementById('showTranslationPanelButton');
+const showInputSttPanelButton = document.getElementById('showInputSttPanelButton');
+const closeTranslationPanelButton = document.getElementById('closeTranslationPanelButton');
+const closeInputSttPanelButton = document.getElementById('closeInputSttPanelButton');
 const inputDevice = document.getElementById('inputDevice');
 const targetLanguage = document.getElementById('targetLanguage');
 const audioMuteToggleButton = document.getElementById('audioMuteToggleButton');
@@ -49,6 +57,8 @@ let isConfigReady = false;
 let isConfigModalRequired = false;
 let isSavingConfig = false;
 let hasInputSttDeltaSinceLastDone = false;
+let isTranslationPanelVisible = true;
+let isInputSttPanelVisible = true;
 
 const TARGET_SAMPLE_RATE = 24000;
 const OUTPUT_SAMPLE_RATE = 24000;
@@ -80,6 +90,54 @@ function pushEventLogLine(text, isError) {
 
 function clearEventLog() {
   eventLog.textContent = '';
+}
+
+function updatePanelLayout() {
+  const visiblePanelCount = Number(isTranslationPanelVisible) + Number(isInputSttPanelVisible);
+
+  if (panelRestoreBar) {
+    panelRestoreBar.hidden = visiblePanelCount === 2;
+  }
+
+  if (showTranslationPanelButton) {
+    showTranslationPanelButton.hidden = isTranslationPanelVisible;
+  }
+
+  if (showInputSttPanelButton) {
+    showInputSttPanelButton.hidden = isInputSttPanelVisible;
+  }
+
+  if (translationPanel) {
+    translationPanel.hidden = !isTranslationPanelVisible;
+  }
+
+  if (inputSttPanel) {
+    inputSttPanel.hidden = !isInputSttPanelVisible;
+  }
+
+  if (panelGrid) {
+    panelGrid.classList.toggle('single-panel', visiblePanelCount === 1);
+  }
+}
+
+function showTranslationPanel() {
+  isTranslationPanelVisible = true;
+  updatePanelLayout();
+}
+
+function showInputSttPanel() {
+  isInputSttPanelVisible = true;
+  updatePanelLayout();
+}
+
+function closeTranslationPanel() {
+  isTranslationPanelVisible = false;
+  updatePanelLayout();
+}
+
+function closeInputSttPanel() {
+  isInputSttPanelVisible = false;
+  updatePanelLayout();
 }
 
 function renderConfigModalState() {
@@ -656,6 +714,7 @@ async function startRealtimeTranslation() {
     updateInputDeviceDisabledState();
 
     await loadInputDevices();
+    updatePanelLayout();
     inputDevice.value = selectedInputDeviceId;
 
     setStatus(RUNNING_STATUS_MESSAGE);
@@ -684,6 +743,30 @@ clearButton.addEventListener('click', () => {
   hasInputSttDeltaSinceLastDone = false;
   flushPersistedOutputSave();
 });
+
+if (closeTranslationPanelButton) {
+  closeTranslationPanelButton.addEventListener('click', () => {
+    closeTranslationPanel();
+  });
+}
+
+if (closeInputSttPanelButton) {
+  closeInputSttPanelButton.addEventListener('click', () => {
+    closeInputSttPanel();
+  });
+}
+
+if (showTranslationPanelButton) {
+  showTranslationPanelButton.addEventListener('click', () => {
+    showTranslationPanel();
+  });
+}
+
+if (showInputSttPanelButton) {
+  showInputSttPanelButton.addEventListener('click', () => {
+    showInputSttPanel();
+  });
+}
 
 saveButton.addEventListener('click', async () => {
   const content = translatedText.value;

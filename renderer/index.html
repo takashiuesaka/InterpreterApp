@@ -93,6 +93,16 @@
 
       <section class="status" id="status">初期化中...</section>
 
+      <div class="panel-restore-bar" id="panelRestoreBar" hidden>
+        <span>Hidden panel:</span>
+        <button id="showTranslationPanelButton" type="button" class="secondary" hidden>
+          Show Translation
+        </button>
+        <button id="showInputSttPanelButton" type="button" class="secondary" hidden>
+          Show STT
+        </button>
+      </div>
+
       <section id="configModal" class="config-modal" hidden>
         <div class="config-modal-card" role="dialog" aria-modal="true" aria-labelledby="configModalTitle">
           <h2 id="configModalTitle">Configuration</h2>
@@ -116,7 +126,7 @@
       </section>
 
       <section class="panel-grid">
-        <article class="panel full-width">
+        <article id="translationPanel" class="panel output-panel">
           <div class="output-header">
             <label for="translatedText">Realtime Output</label>
             <div class="output-actions">
@@ -135,14 +145,18 @@
                 </svg>
               </button>
               <button id="clearButton" type="button" class="secondary">Clear Output</button>
+              <button id="closeTranslationPanelButton" type="button" class="secondary panel-close-button" aria-label="Close translation panel" title="Close translation panel">×</button>
             </div>
           </div>
           <textarea id="translatedText" readonly placeholder="Microphone translation appears here..."></textarea>
         </article>
 
-        <article class="panel full-width">
+        <article id="inputSttPanel" class="panel output-panel">
           <div class="output-header">
             <label for="inputSttText">Input Speech To Text (English)</label>
+            <div class="output-actions">
+              <button id="closeInputSttPanelButton" type="button" class="secondary panel-close-button" aria-label="Close STT panel" title="Close STT panel">×</button>
+            </div>
           </div>
           <textarea
             id="inputSttText"

@@ -153,6 +153,19 @@ body {
   color: var(--error);
 }
 
+.panel-restore-bar {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--text-subtle);
+}
+
 .config-modal {
   position: fixed;
   inset: 0;
@@ -216,11 +229,27 @@ body {
   gap: 16px;
 }
 
+.panel-grid.single-panel {
+  grid-template-columns: 1fr;
+}
+
 .panel {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 16px;
+}
+
+.output-panel[hidden] {
+  display: none;
+}
+
+.panel-close-button {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  font-size: 1.2rem;
+  line-height: 1;
 }
 
 .full-width {
@@ -475,6 +504,10 @@ button:disabled {
   }
 
   .panel-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-grid.single-panel {
     grid-template-columns: 1fr;
   }
 
