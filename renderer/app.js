@@ -727,9 +727,6 @@ async function startRealtimeTranslation() {
   }
 
   clearEventLog();
-  if (inputSttText) {
-    inputSttText.value = '';
-  }
   hasInputSttDeltaSinceLastDone = false;
   pushEventLogLine(`[${formatTimestamp(Date.now())}] client: start requested`, false);
   setStatus('Realtime翻訳セッションを開始しています...');
