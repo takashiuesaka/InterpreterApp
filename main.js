@@ -643,13 +643,13 @@ ipcMain.handle('translate:realtime-audio-stop', async (event) => {
 
 ipcMain.handle('translate:health', async () => {
   try {
-    const config = await getFoundryConfig();
+    await getFoundryConfig();
 
     if (startupAuthError) {
-      await getAccessToken(config.azureTenantId, true);
-      startupAuthError = null;
-    } else {
-      await getAccessToken(config.azureTenantId);
+      return {
+        ready: false,
+        reason: startupAuthError instanceof Error ? startupAuthError.message : String(startupAuthError),
+      };
     }
 
     return { ready: true };
