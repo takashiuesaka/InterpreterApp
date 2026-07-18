@@ -399,6 +399,9 @@ async function startRealtimeSession(webContents, targetLanguage) {
       JSON.stringify({
         type: 'session.update',
         session: {
+          input_audio_transcription: {
+            model: config.deployment,
+          },
           audio: {
             output: {
               language: targetLanguage,
@@ -485,6 +488,26 @@ async function startRealtimeSession(webContents, targetLanguage) {
         const doneText =
           typeof event?.text === 'string' ? event.text : extractTextFromResponseDone(event);
         webContents.send('translate:done', { text: doneText });
+        return;
+      }
+
+      const isInputSttDeltaEvent =
+        event?.type === 'conversation.item.input_audio_transcription.delta';
+
+      if (isInputSttDeltaEvent) {
+        const delta = typeof event?.delta === 'string' ? event.delta : '';
+        if (delta) {
+          webContents.send('translate:input-stt-delta', { delta });
+        }
+        return;
+      }
+
+      const isInputSttDoneEvent =
+        event?.type === 'conversation.item.input_audio_transcription.completed';
+
+      if (isInputSttDoneEvent) {
+        const transcript = typeof event?.transcript === 'string' ? event.transcript : '';
+        webContents.send('translate:input-stt-done', { text: transcript });
         return;
       }
 
