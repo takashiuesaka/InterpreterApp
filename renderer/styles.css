@@ -367,6 +367,11 @@ textarea {
   line-height: 1.5;
 }
 
+.input-stt-text {
+  min-height: 180px;
+  background: #fbfcff;
+}
+
 select {
   width: 100%;
   border-radius: 10px;
@@ -475,5 +480,9 @@ button:disabled {
 
   textarea {
     min-height: 220px;
+  }
+
+  .input-stt-text {
+    min-height: 160px;
   }
 }
