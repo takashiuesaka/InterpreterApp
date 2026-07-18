@@ -1,4 +1,5 @@
 const translatedText = document.getElementById('translatedText');
+const inputSttText = document.getElementById('inputSttText');
 const inputDevice = document.getElementById('inputDevice');
 const targetLanguage = document.getElementById('targetLanguage');
 const audioMuteToggleButton = document.getElementById('audioMuteToggleButton');
@@ -28,6 +29,8 @@ let unsubscribeErrorListener = null;
 let unsubscribeSessionListener = null;
 let unsubscribeRealtimeEventListener = null;
 let unsubscribeAudioDeltaListener = null;
+let unsubscribeInputSttDeltaListener = null;
+let unsubscribeInputSttDoneListener = null;
 
 let mediaStream = null;
 let audioContext = null;
@@ -265,6 +268,15 @@ function appendTranslationDelta(delta) {
   translatedText.value += delta;
   translatedText.scrollTop = translatedText.scrollHeight;
   schedulePersistedOutputSave();
+}
+
+function appendInputSttDelta(delta) {
+  if (!delta || !inputSttText) {
+    return;
+  }
+
+  inputSttText.value += delta;
+  inputSttText.scrollTop = inputSttText.scrollHeight;
 }
 
 async function persistOutputNow() {
@@ -623,6 +635,9 @@ async function startRealtimeTranslation() {
   }
 
   clearEventLog();
+  if (inputSttText) {
+    inputSttText.value = '';
+  }
   pushEventLogLine(`[${formatTimestamp(Date.now())}] client: start requested`, false);
   setStatus('Realtime翻訳セッションを開始しています...');
 
@@ -661,6 +676,9 @@ stopButton.addEventListener('click', async () => {
 
 clearButton.addEventListener('click', () => {
   translatedText.value = '';
+  if (inputSttText) {
+    inputSttText.value = '';
+  }
   flushPersistedOutputSave();
 });
 
@@ -862,6 +880,28 @@ async function initialize() {
     playPcm16AudioBase64(audioBase64);
   });
 
+  unsubscribeInputSttDeltaListener = window.translatorApi.onInputSttDelta((payload) => {
+    const delta = payload?.delta;
+    if (typeof delta !== 'string') {
+      return;
+    }
+
+    appendInputSttDelta(delta);
+    pushEventLogLine(
+      `[${formatTimestamp(Date.now())}] ui: input-stt:delta (${delta.length}) ${delta.slice(0, 80)}`,
+      false,
+    );
+  });
+
+  unsubscribeInputSttDoneListener = window.translatorApi.onInputSttDone((payload) => {
+    appendInputSttDelta('\n');
+    const text = typeof payload?.text === 'string' ? payload.text : '';
+    pushEventLogLine(
+      `[${formatTimestamp(Date.now())}] ui: input-stt:done (${text.length}) ${text.slice(0, 80)}`,
+      false,
+    );
+  });
+
   try {
     const configState = await loadConfigState();
     if (!configState.valid) {
@@ -911,6 +951,14 @@ window.addEventListener('beforeunload', () => {
 
   if (typeof unsubscribeAudioDeltaListener === 'function') {
     unsubscribeAudioDeltaListener();
+  }
+
+  if (typeof unsubscribeInputSttDeltaListener === 'function') {
+    unsubscribeInputSttDeltaListener();
+  }
+
+  if (typeof unsubscribeInputSttDoneListener === 'function') {
+    unsubscribeInputSttDoneListener();
   }
 
   if (deviceChangeListener && navigator.mediaDevices) {
