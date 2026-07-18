@@ -93,6 +93,16 @@
 
       <section class="status" id="status">初期化中...</section>
 
+      <div class="panel-restore-bar" id="panelRestoreBar" hidden>
+        <span>Hidden panel:</span>
+        <button id="showTranslationPanelButton" type="button" class="secondary" hidden>
+          Show Translation
+        </button>
+        <button id="showInputSttPanelButton" type="button" class="secondary" hidden>
+          Show STT
+        </button>
+      </div>
+
       <section id="configModal" class="config-modal" hidden>
         <div class="config-modal-card" role="dialog" aria-modal="true" aria-labelledby="configModalTitle">
           <h2 id="configModalTitle">Configuration</h2>
@@ -116,7 +126,7 @@
       </section>
 
       <section class="panel-grid">
-        <article class="panel full-width">
+        <article id="translationPanel" class="panel output-panel">
           <div class="output-header">
             <label for="translatedText">Realtime Output</label>
             <div class="output-actions">
@@ -135,9 +145,40 @@
                 </svg>
               </button>
               <button id="clearButton" type="button" class="secondary">Clear Output</button>
+              <button id="closeTranslationPanelButton" type="button" class="secondary panel-close-button" aria-label="Close translation panel" title="Close translation panel">×</button>
             </div>
           </div>
           <textarea id="translatedText" readonly placeholder="Microphone translation appears here..."></textarea>
+        </article>
+
+        <article id="inputSttPanel" class="panel output-panel">
+          <div class="output-header">
+            <label for="inputSttText">Input Speech To Text (English)</label>
+            <div class="output-actions">
+              <button
+                id="saveInputSttButton"
+                type="button"
+                class="icon-button secondary"
+                aria-label="Save STT output"
+                title="Save STT output"
+              >
+                <svg class="save-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    d="M17 3H5c-1.11 0-2 .89-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zM12 19a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm3-10H5V5h10v4z"
+                    fill="currentColor"
+                  />
+                </svg>
+              </button>
+              <button id="clearInputSttButton" type="button" class="secondary">Clear STT</button>
+              <button id="closeInputSttPanelButton" type="button" class="secondary panel-close-button" aria-label="Close STT panel" title="Close STT panel">×</button>
+            </div>
+          </div>
+          <textarea
+            id="inputSttText"
+            class="input-stt-text"
+            readonly
+            placeholder="Input speech transcription appears here..."
+          ></textarea>
         </article>
 
         <article id="eventLogPanel" class="panel full-width">

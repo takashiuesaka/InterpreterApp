@@ -1,4 +1,15 @@
 const translatedText = document.getElementById('translatedText');
+const inputSttText = document.getElementById('inputSttText');
+const saveInputSttButton = document.getElementById('saveInputSttButton');
+const clearInputSttButton = document.getElementById('clearInputSttButton');
+const panelGrid = document.querySelector('.panel-grid');
+const translationPanel = document.getElementById('translationPanel');
+const inputSttPanel = document.getElementById('inputSttPanel');
+const panelRestoreBar = document.getElementById('panelRestoreBar');
+const showTranslationPanelButton = document.getElementById('showTranslationPanelButton');
+const showInputSttPanelButton = document.getElementById('showInputSttPanelButton');
+const closeTranslationPanelButton = document.getElementById('closeTranslationPanelButton');
+const closeInputSttPanelButton = document.getElementById('closeInputSttPanelButton');
 const inputDevice = document.getElementById('inputDevice');
 const targetLanguage = document.getElementById('targetLanguage');
 const audioMuteToggleButton = document.getElementById('audioMuteToggleButton');
@@ -28,6 +39,8 @@ let unsubscribeErrorListener = null;
 let unsubscribeSessionListener = null;
 let unsubscribeRealtimeEventListener = null;
 let unsubscribeAudioDeltaListener = null;
+let unsubscribeInputSttDeltaListener = null;
+let unsubscribeInputSttDoneListener = null;
 
 let mediaStream = null;
 let audioContext = null;
@@ -45,6 +58,10 @@ let persistOutputTimer = null;
 let isConfigReady = false;
 let isConfigModalRequired = false;
 let isSavingConfig = false;
+let hasInputSttDeltaSinceLastDone = false;
+let isTranslationPanelVisible = true;
+let isInputSttPanelVisible = true;
+let persistInputSttTimer = null;
 
 const TARGET_SAMPLE_RATE = 24000;
 const OUTPUT_SAMPLE_RATE = 24000;
@@ -76,6 +93,54 @@ function pushEventLogLine(text, isError) {
 
 function clearEventLog() {
   eventLog.textContent = '';
+}
+
+function updatePanelLayout() {
+  const visiblePanelCount = Number(isTranslationPanelVisible) + Number(isInputSttPanelVisible);
+
+  if (panelRestoreBar) {
+    panelRestoreBar.hidden = visiblePanelCount === 2;
+  }
+
+  if (showTranslationPanelButton) {
+    showTranslationPanelButton.hidden = isTranslationPanelVisible;
+  }
+
+  if (showInputSttPanelButton) {
+    showInputSttPanelButton.hidden = isInputSttPanelVisible;
+  }
+
+  if (translationPanel) {
+    translationPanel.hidden = !isTranslationPanelVisible;
+  }
+
+  if (inputSttPanel) {
+    inputSttPanel.hidden = !isInputSttPanelVisible;
+  }
+
+  if (panelGrid) {
+    panelGrid.classList.toggle('single-panel', visiblePanelCount === 1);
+  }
+}
+
+function showTranslationPanel() {
+  isTranslationPanelVisible = true;
+  updatePanelLayout();
+}
+
+function showInputSttPanel() {
+  isInputSttPanelVisible = true;
+  updatePanelLayout();
+}
+
+function closeTranslationPanel() {
+  isTranslationPanelVisible = false;
+  updatePanelLayout();
+}
+
+function closeInputSttPanel() {
+  isInputSttPanelVisible = false;
+  updatePanelLayout();
 }
 
 function renderConfigModalState() {
@@ -267,6 +332,16 @@ function appendTranslationDelta(delta) {
   schedulePersistedOutputSave();
 }
 
+function appendInputSttDelta(delta) {
+  if (!delta || !inputSttText) {
+    return;
+  }
+
+  inputSttText.value += delta;
+  inputSttText.scrollTop = inputSttText.scrollHeight;
+  schedulePersistedInputSttSave();
+}
+
 async function persistOutputNow() {
   try {
     await window.translatorApi.savePersistedTranslation(translatedText.value);
@@ -293,6 +368,34 @@ async function flushPersistedOutputSave() {
   }
 
   await persistOutputNow();
+}
+
+async function persistInputSttNow() {
+  try {
+    await window.translatorApi.savePersistedInputStt(inputSttText?.value || '');
+  } catch {
+    // Keep the translation flow alive even if persistence fails.
+  }
+}
+
+function schedulePersistedInputSttSave() {
+  if (persistInputSttTimer) {
+    clearTimeout(persistInputSttTimer);
+  }
+
+  persistInputSttTimer = setTimeout(() => {
+    persistInputSttTimer = null;
+    persistInputSttNow();
+  }, OUTPUT_PERSIST_DEBOUNCE_MS);
+}
+
+async function flushPersistedInputSttSave() {
+  if (persistInputSttTimer) {
+    clearTimeout(persistInputSttTimer);
+    persistInputSttTimer = null;
+  }
+
+  await persistInputSttNow();
 }
 
 function buildSaveFileName() {
@@ -603,6 +706,7 @@ async function stopRealtimeTranslation() {
   }
 
   await flushPersistedOutputSave();
+  await flushPersistedInputSttSave();
 
   if (!statusBox.classList.contains('error')) {
     setStatus('停止しました。Start で再開できます。');
@@ -623,6 +727,7 @@ async function startRealtimeTranslation() {
   }
 
   clearEventLog();
+  hasInputSttDeltaSinceLastDone = false;
   pushEventLogLine(`[${formatTimestamp(Date.now())}] client: start requested`, false);
   setStatus('Realtime翻訳セッションを開始しています...');
 
@@ -639,6 +744,7 @@ async function startRealtimeTranslation() {
     updateInputDeviceDisabledState();
 
     await loadInputDevices();
+    updatePanelLayout();
     inputDevice.value = selectedInputDeviceId;
 
     setStatus(RUNNING_STATUS_MESSAGE);
@@ -661,8 +767,68 @@ stopButton.addEventListener('click', async () => {
 
 clearButton.addEventListener('click', () => {
   translatedText.value = '';
+  hasInputSttDeltaSinceLastDone = false;
   flushPersistedOutputSave();
 });
+
+if (saveInputSttButton) {
+  saveInputSttButton.addEventListener('click', async () => {
+    const content = inputSttText.value;
+    if (!content.trim()) {
+      setStatus('保存するSTT結果がありません。');
+      return;
+    }
+
+    const now = new Date();
+    const date = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    const time = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+    const fileName = `input-stt-output-${date}-${time}.txt`;
+    const result = await window.translatorApi.saveTranslationAs(fileName, content);
+
+    if (result?.canceled) {
+      return;
+    }
+
+    if (result?.ok) {
+      setStatus(`保存しました: ${result.filePath}`);
+      return;
+    }
+
+    setStatus(`保存エラー: ${result?.error || 'Unknown error'}`, true);
+  });
+}
+
+if (clearInputSttButton) {
+  clearInputSttButton.addEventListener('click', () => {
+    inputSttText.value = '';
+    hasInputSttDeltaSinceLastDone = false;
+    flushPersistedInputSttSave();
+  });
+}
+
+if (closeTranslationPanelButton) {
+  closeTranslationPanelButton.addEventListener('click', () => {
+    closeTranslationPanel();
+  });
+}
+
+if (closeInputSttPanelButton) {
+  closeInputSttPanelButton.addEventListener('click', () => {
+    closeInputSttPanel();
+  });
+}
+
+if (showTranslationPanelButton) {
+  showTranslationPanelButton.addEventListener('click', () => {
+    showTranslationPanel();
+  });
+}
+
+if (showInputSttPanelButton) {
+  showInputSttPanelButton.addEventListener('click', () => {
+    showInputSttPanel();
+  });
+}
 
 saveButton.addEventListener('click', async () => {
   const content = translatedText.value;
@@ -773,6 +939,19 @@ async function initialize() {
   }
 
   try {
+    const persistedInputStt = await window.translatorApi.loadPersistedInputStt();
+    if (
+      persistedInputStt?.ok &&
+      typeof persistedInputStt?.content === 'string' &&
+      persistedInputStt.content.length > 0
+    ) {
+      inputSttText.value = persistedInputStt.content;
+    }
+  } catch {
+    // no-op
+  }
+
+  try {
     await loadInputDevices();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -862,6 +1041,33 @@ async function initialize() {
     playPcm16AudioBase64(audioBase64);
   });
 
+  unsubscribeInputSttDeltaListener = window.translatorApi.onInputSttDelta((payload) => {
+    const delta = payload?.delta;
+    if (typeof delta !== 'string') {
+      return;
+    }
+
+    appendInputSttDelta(delta);
+    hasInputSttDeltaSinceLastDone = true;
+    pushEventLogLine(
+      `[${formatTimestamp(Date.now())}] ui: input-stt:delta (${delta.length}) ${delta.slice(0, 80)}`,
+      false,
+    );
+  });
+
+  unsubscribeInputSttDoneListener = window.translatorApi.onInputSttDone((payload) => {
+    const text = typeof payload?.text === 'string' ? payload.text : '';
+    if (!hasInputSttDeltaSinceLastDone && text) {
+      appendInputSttDelta(text);
+    }
+    appendInputSttDelta('\n');
+    hasInputSttDeltaSinceLastDone = false;
+    pushEventLogLine(
+      `[${formatTimestamp(Date.now())}] ui: input-stt:done (${text.length}) ${text.slice(0, 80)}`,
+      false,
+    );
+  });
+
   try {
     const configState = await loadConfigState();
     if (!configState.valid) {
@@ -887,6 +1093,7 @@ renderEventLogVisibility();
 
 window.addEventListener('beforeunload', () => {
   flushPersistedOutputSave();
+  flushPersistedInputSttSave();
   stopRealtimeTranslation();
 
   if (typeof unsubscribeDeltaListener === 'function') {
@@ -911,6 +1118,14 @@ window.addEventListener('beforeunload', () => {
 
   if (typeof unsubscribeAudioDeltaListener === 'function') {
     unsubscribeAudioDeltaListener();
+  }
+
+  if (typeof unsubscribeInputSttDeltaListener === 'function') {
+    unsubscribeInputSttDeltaListener();
+  }
+
+  if (typeof unsubscribeInputSttDoneListener === 'function') {
+    unsubscribeInputSttDoneListener();
   }
 
   if (deviceChangeListener && navigator.mediaDevices) {

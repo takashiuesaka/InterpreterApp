@@ -6,6 +6,7 @@ const WebSocket = require('ws');
 
 const FOUNDRY_SCOPE = 'https://cognitiveservices.azure.com/.default';
 const PERSISTED_TRANSLATION_FILENAME = 'translation-output.txt';
+const PERSISTED_INPUT_STT_FILENAME = 'input-stt-output.txt';
 const APP_CONFIG_FILENAME = 'app-config.json';
 const REQUIRED_CONFIG_KEYS = ['FOUNDRY_ENDPOINT', 'FOUNDRY_DEPLOYMENT', 'AZURE_TENANT_ID'];
 const DEFAULT_REALTIME_MODE = 'auto';
@@ -325,6 +326,38 @@ function extractTextFromResponseDone(event) {
     .trim();
 }
 
+function extractInputSttText(event) {
+  if (typeof event?.transcript === 'string' && event.transcript) {
+    return event.transcript;
+  }
+
+  if (typeof event?.text === 'string' && event.text) {
+    return event.text;
+  }
+
+  if (typeof event?.delta === 'string' && event.delta) {
+    return event.delta;
+  }
+
+  const parts = event?.item?.content;
+  if (!Array.isArray(parts)) {
+    return '';
+  }
+
+  return parts
+    .map((part) => {
+      if (typeof part?.transcript === 'string') {
+        return part.transcript;
+      }
+      if (typeof part?.text === 'string') {
+        return part.text;
+      }
+      return '';
+    })
+    .join('')
+    .trim();
+}
+
 function summarizeRealtimeEvent(event) {
   const eventType = event?.type || 'unknown';
 
@@ -338,7 +371,8 @@ function summarizeRealtimeEvent(event) {
     eventType === 'response.audio_transcript.delta' ||
     eventType === 'session.output_text.delta' ||
     eventType === 'session.output_transcript.delta' ||
-    eventType === 'session.output_audio_transcript.delta'
+    eventType === 'session.output_audio_transcript.delta' ||
+    eventType === 'session.input_transcript.delta'
   ) {
     const delta =
       typeof event?.delta === 'string'
@@ -355,7 +389,8 @@ function summarizeRealtimeEvent(event) {
     eventType === 'response.done' ||
     eventType === 'session.output_text.done' ||
     eventType === 'session.output_transcript.done' ||
-    eventType === 'session.output_audio_transcript.done'
+    eventType === 'session.output_audio_transcript.done' ||
+    eventType === 'session.input_transcript.done'
   ) {
     const doneText =
       typeof event?.text === 'string' ? event.text : extractTextFromResponseDone(event);
@@ -366,11 +401,22 @@ function summarizeRealtimeEvent(event) {
     return 'session updated';
   }
 
+  if (
+    eventType === 'conversation.item.input_audio_transcription.failed' ||
+    eventType === 'conversation.item.audio_transcription.failed'
+  ) {
+    return event?.error?.message || 'input transcription failed';
+  }
+
   return 'event received';
 }
 
 function getPersistedTranslationPath() {
   return path.join(app.getPath('userData'), PERSISTED_TRANSLATION_FILENAME);
+}
+
+function getPersistedInputSttPath() {
+  return path.join(app.getPath('userData'), PERSISTED_INPUT_STT_FILENAME);
 }
 
 async function startRealtimeSession(webContents, targetLanguage) {
@@ -400,6 +446,11 @@ async function startRealtimeSession(webContents, targetLanguage) {
         type: 'session.update',
         session: {
           audio: {
+            input: {
+              transcription: {
+                model: 'gpt-realtime-whisper',
+              },
+            },
             output: {
               language: targetLanguage,
             },
@@ -488,6 +539,40 @@ async function startRealtimeSession(webContents, targetLanguage) {
         return;
       }
 
+      const isInputSttDeltaEvent =
+        event?.type === 'conversation.item.input_audio_transcription.delta' ||
+        event?.type === 'conversation.item.audio_transcription.delta' ||
+        event?.type === 'session.input_transcript.delta';
+
+      if (isInputSttDeltaEvent) {
+        const delta = extractInputSttText(event);
+        if (delta) {
+          webContents.send('translate:input-stt-delta', { delta });
+        }
+        return;
+      }
+
+      const isInputSttDoneEvent =
+        event?.type === 'conversation.item.input_audio_transcription.completed' ||
+        event?.type === 'conversation.item.audio_transcription.completed' ||
+        event?.type === 'session.input_transcript.done';
+
+      if (isInputSttDoneEvent) {
+        const transcript = extractInputSttText(event);
+        webContents.send('translate:input-stt-done', { text: transcript });
+        return;
+      }
+
+      const isInputSttFailedEvent =
+        event?.type === 'conversation.item.input_audio_transcription.failed' ||
+        event?.type === 'conversation.item.audio_transcription.failed';
+
+      if (isInputSttFailedEvent) {
+        const message = event?.error?.message || 'Input transcription failed.';
+        webContents.send('translate:error', { message });
+        return;
+      }
+
       const isAudioDeltaEvent = event?.type === 'session.output_audio.delta';
       if (isAudioDeltaEvent) {
         const audio = typeof event?.delta === 'string' ? event.delta : '';
@@ -563,13 +648,13 @@ ipcMain.handle('translate:realtime-audio-stop', async (event) => {
 
 ipcMain.handle('translate:health', async () => {
   try {
-    const config = await getFoundryConfig();
+    await getFoundryConfig();
 
     if (startupAuthError) {
-      await getAccessToken(config.azureTenantId, true);
-      startupAuthError = null;
-    } else {
-      await getAccessToken(config.azureTenantId);
+      return {
+        ready: false,
+        reason: startupAuthError instanceof Error ? startupAuthError.message : String(startupAuthError),
+      };
     }
 
     return { ready: true };
@@ -629,11 +714,44 @@ ipcMain.handle('app:load-persisted-translation', async () => {
   }
 });
 
+ipcMain.handle('app:load-persisted-input-stt', async () => {
+  try {
+    const persistedPath = getPersistedInputSttPath();
+    const content = await fs.readFile(persistedPath, 'utf8');
+    return { ok: true, content };
+  } catch (error) {
+    if (error && typeof error === 'object' && error.code === 'ENOENT') {
+      return { ok: true, content: '' };
+    }
+
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+});
+
 ipcMain.handle('app:save-persisted-translation', async (_event, payload) => {
   const content = typeof payload?.content === 'string' ? payload.content : '';
 
   try {
     const persistedPath = getPersistedTranslationPath();
+    await fs.mkdir(path.dirname(persistedPath), { recursive: true });
+    await fs.writeFile(persistedPath, content, 'utf8');
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+});
+
+ipcMain.handle('app:save-persisted-input-stt', async (_event, payload) => {
+  const content = typeof payload?.content === 'string' ? payload.content : '';
+
+  try {
+    const persistedPath = getPersistedInputSttPath();
     await fs.mkdir(path.dirname(persistedPath), { recursive: true });
     await fs.writeFile(persistedPath, content, 'utf8');
     return { ok: true };

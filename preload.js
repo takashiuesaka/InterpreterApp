@@ -68,14 +68,40 @@ contextBridge.exposeInMainWorld('translatorApi', {
       ipcRenderer.removeListener('translate:audio-delta', listener);
     };
   },
+  onInputSttDelta: (callback) => {
+    const listener = (_event, payload) => {
+      callback(payload);
+    };
+    ipcRenderer.on('translate:input-stt-delta', listener);
+    return () => {
+      ipcRenderer.removeListener('translate:input-stt-delta', listener);
+    };
+  },
+  onInputSttDone: (callback) => {
+    const listener = (_event, payload) => {
+      callback(payload);
+    };
+    ipcRenderer.on('translate:input-stt-done', listener);
+    return () => {
+      ipcRenderer.removeListener('translate:input-stt-done', listener);
+    };
+  },
   healthCheck: async () => {
     return ipcRenderer.invoke('translate:health');
   },
   loadPersistedTranslation: async () => {
     return ipcRenderer.invoke('app:load-persisted-translation');
   },
+  loadPersistedInputStt: async () => {
+    return ipcRenderer.invoke('app:load-persisted-input-stt');
+  },
   savePersistedTranslation: async (content) => {
     return ipcRenderer.invoke('app:save-persisted-translation', {
+      content,
+    });
+  },
+  savePersistedInputStt: async (content) => {
+    return ipcRenderer.invoke('app:save-persisted-input-stt', {
       content,
     });
   },
