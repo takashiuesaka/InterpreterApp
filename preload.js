@@ -92,8 +92,16 @@ contextBridge.exposeInMainWorld('translatorApi', {
   loadPersistedTranslation: async () => {
     return ipcRenderer.invoke('app:load-persisted-translation');
   },
+  loadPersistedInputStt: async () => {
+    return ipcRenderer.invoke('app:load-persisted-input-stt');
+  },
   savePersistedTranslation: async (content) => {
     return ipcRenderer.invoke('app:save-persisted-translation', {
+      content,
+    });
+  },
+  savePersistedInputStt: async (content) => {
+    return ipcRenderer.invoke('app:save-persisted-input-stt', {
       content,
     });
   },

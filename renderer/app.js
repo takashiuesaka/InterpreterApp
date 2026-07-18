@@ -1,5 +1,7 @@
 const translatedText = document.getElementById('translatedText');
 const inputSttText = document.getElementById('inputSttText');
+const saveInputSttButton = document.getElementById('saveInputSttButton');
+const clearInputSttButton = document.getElementById('clearInputSttButton');
 const panelGrid = document.querySelector('.panel-grid');
 const translationPanel = document.getElementById('translationPanel');
 const inputSttPanel = document.getElementById('inputSttPanel');
@@ -59,6 +61,7 @@ let isSavingConfig = false;
 let hasInputSttDeltaSinceLastDone = false;
 let isTranslationPanelVisible = true;
 let isInputSttPanelVisible = true;
+let persistInputSttTimer = null;
 
 const TARGET_SAMPLE_RATE = 24000;
 const OUTPUT_SAMPLE_RATE = 24000;
@@ -336,6 +339,7 @@ function appendInputSttDelta(delta) {
 
   inputSttText.value += delta;
   inputSttText.scrollTop = inputSttText.scrollHeight;
+  schedulePersistedInputSttSave();
 }
 
 async function persistOutputNow() {
@@ -364,6 +368,34 @@ async function flushPersistedOutputSave() {
   }
 
   await persistOutputNow();
+}
+
+async function persistInputSttNow() {
+  try {
+    await window.translatorApi.savePersistedInputStt(inputSttText?.value || '');
+  } catch {
+    // Keep the translation flow alive even if persistence fails.
+  }
+}
+
+function schedulePersistedInputSttSave() {
+  if (persistInputSttTimer) {
+    clearTimeout(persistInputSttTimer);
+  }
+
+  persistInputSttTimer = setTimeout(() => {
+    persistInputSttTimer = null;
+    persistInputSttNow();
+  }, OUTPUT_PERSIST_DEBOUNCE_MS);
+}
+
+async function flushPersistedInputSttSave() {
+  if (persistInputSttTimer) {
+    clearTimeout(persistInputSttTimer);
+    persistInputSttTimer = null;
+  }
+
+  await persistInputSttNow();
 }
 
 function buildSaveFileName() {
@@ -674,6 +706,7 @@ async function stopRealtimeTranslation() {
   }
 
   await flushPersistedOutputSave();
+  await flushPersistedInputSttSave();
 
   if (!statusBox.classList.contains('error')) {
     setStatus('停止しました。Start で再開できます。');
@@ -737,12 +770,44 @@ stopButton.addEventListener('click', async () => {
 
 clearButton.addEventListener('click', () => {
   translatedText.value = '';
-  if (inputSttText) {
-    inputSttText.value = '';
-  }
   hasInputSttDeltaSinceLastDone = false;
   flushPersistedOutputSave();
 });
+
+if (saveInputSttButton) {
+  saveInputSttButton.addEventListener('click', async () => {
+    const content = inputSttText.value;
+    if (!content.trim()) {
+      setStatus('保存するSTT結果がありません。');
+      return;
+    }
+
+    const now = new Date();
+    const date = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    const time = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+    const fileName = `input-stt-output-${date}-${time}.txt`;
+    const result = await window.translatorApi.saveTranslationAs(fileName, content);
+
+    if (result?.canceled) {
+      return;
+    }
+
+    if (result?.ok) {
+      setStatus(`保存しました: ${result.filePath}`);
+      return;
+    }
+
+    setStatus(`保存エラー: ${result?.error || 'Unknown error'}`, true);
+  });
+}
+
+if (clearInputSttButton) {
+  clearInputSttButton.addEventListener('click', () => {
+    inputSttText.value = '';
+    hasInputSttDeltaSinceLastDone = false;
+    flushPersistedInputSttSave();
+  });
+}
 
 if (closeTranslationPanelButton) {
   closeTranslationPanelButton.addEventListener('click', () => {
@@ -871,6 +936,19 @@ async function initialize() {
     const persisted = await window.translatorApi.loadPersistedTranslation();
     if (persisted?.ok && typeof persisted?.content === 'string' && persisted.content.length > 0) {
       translatedText.value = persisted.content;
+    }
+  } catch {
+    // no-op
+  }
+
+  try {
+    const persistedInputStt = await window.translatorApi.loadPersistedInputStt();
+    if (
+      persistedInputStt?.ok &&
+      typeof persistedInputStt?.content === 'string' &&
+      persistedInputStt.content.length > 0
+    ) {
+      inputSttText.value = persistedInputStt.content;
     }
   } catch {
     // no-op
@@ -1018,6 +1096,7 @@ renderEventLogVisibility();
 
 window.addEventListener('beforeunload', () => {
   flushPersistedOutputSave();
+  flushPersistedInputSttSave();
   stopRealtimeTranslation();
 
   if (typeof unsubscribeDeltaListener === 'function') {

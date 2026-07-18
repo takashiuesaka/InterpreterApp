@@ -6,6 +6,7 @@ const WebSocket = require('ws');
 
 const FOUNDRY_SCOPE = 'https://cognitiveservices.azure.com/.default';
 const PERSISTED_TRANSLATION_FILENAME = 'translation-output.txt';
+const PERSISTED_INPUT_STT_FILENAME = 'input-stt-output.txt';
 const APP_CONFIG_FILENAME = 'app-config.json';
 const REQUIRED_CONFIG_KEYS = ['FOUNDRY_ENDPOINT', 'FOUNDRY_DEPLOYMENT', 'AZURE_TENANT_ID'];
 const DEFAULT_REALTIME_MODE = 'auto';
@@ -414,6 +415,10 @@ function getPersistedTranslationPath() {
   return path.join(app.getPath('userData'), PERSISTED_TRANSLATION_FILENAME);
 }
 
+function getPersistedInputSttPath() {
+  return path.join(app.getPath('userData'), PERSISTED_INPUT_STT_FILENAME);
+}
+
 async function startRealtimeSession(webContents, targetLanguage) {
   const webContentsId = webContents.id;
   closeRealtimeSession(webContentsId);
@@ -709,11 +714,44 @@ ipcMain.handle('app:load-persisted-translation', async () => {
   }
 });
 
+ipcMain.handle('app:load-persisted-input-stt', async () => {
+  try {
+    const persistedPath = getPersistedInputSttPath();
+    const content = await fs.readFile(persistedPath, 'utf8');
+    return { ok: true, content };
+  } catch (error) {
+    if (error && typeof error === 'object' && error.code === 'ENOENT') {
+      return { ok: true, content: '' };
+    }
+
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+});
+
 ipcMain.handle('app:save-persisted-translation', async (_event, payload) => {
   const content = typeof payload?.content === 'string' ? payload.content : '';
 
   try {
     const persistedPath = getPersistedTranslationPath();
+    await fs.mkdir(path.dirname(persistedPath), { recursive: true });
+    await fs.writeFile(persistedPath, content, 'utf8');
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+});
+
+ipcMain.handle('app:save-persisted-input-stt', async (_event, payload) => {
+  const content = typeof payload?.content === 'string' ? payload.content : '';
+
+  try {
+    const persistedPath = getPersistedInputSttPath();
     await fs.mkdir(path.dirname(persistedPath), { recursive: true });
     await fs.writeFile(persistedPath, content, 'utf8');
     return { ok: true };
