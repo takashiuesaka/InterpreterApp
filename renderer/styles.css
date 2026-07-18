@@ -397,7 +397,7 @@ textarea {
 }
 
 .input-stt-text {
-  min-height: 180px;
+  min-height: 420px;
   background: #fbfcff;
 }
 
@@ -516,6 +516,6 @@ button:disabled {
   }
 
   .input-stt-text {
-    min-height: 160px;
+    min-height: 220px;
   }
 }
