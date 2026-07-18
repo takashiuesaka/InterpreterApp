@@ -399,10 +399,12 @@ async function startRealtimeSession(webContents, targetLanguage) {
       JSON.stringify({
         type: 'session.update',
         session: {
-          input_audio_transcription: {
-            model: config.deployment,
-          },
           audio: {
+            input: {
+              transcription: {
+                model: config.deployment,
+              },
+            },
             output: {
               language: targetLanguage,
             },
